@@ -1,7 +1,6 @@
-data/
-output/
-Archive/
+/.RData
 .Rproj.user
 .Rhistory
-.RData
 .Ruserdata
+Archive/
+output/plots/
