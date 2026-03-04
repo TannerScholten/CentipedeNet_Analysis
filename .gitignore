@@ -1,0 +1,7 @@
+data/
+output/
+Archive/
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
