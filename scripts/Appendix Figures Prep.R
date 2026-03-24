@@ -28,10 +28,9 @@ Effort <- ggplot(SampleData, aes(y = Site, x = Effort, fill = Gear)) +
   geom_boxplot(alpha = 0.65) +  # Create boxplots
   scale_fill_manual(values = GearColors()) +
   facet_wrap(. ~ Gear, scales = "free", nrow = 3,  strip.position = "top", labeller = as_labeller(labeller)) +
-  theme_bw() +
-  source("scripts/0_PlotTheme.R")$theme # This is slightly awkward but to maintain BW for appendix if desired.
-  # Better to just use the global theme if consistency is key:
-  # theme_set already handles it.rm(labeller)
+  theme(panel.grid.major = element_line(colour = "grey90"), panel.grid.minor = element_line(colour = "grey95")) # Optional: keep grid if appendix needs it
+rm(labeller)
+
 
 
 # Boxplot Template Function
@@ -39,8 +38,8 @@ Effort <- ggplot(SampleData, aes(y = Site, x = Effort, fill = Gear)) +
 PlotBySite <- function(Metric, Label) {
   ggplot(SampleData, aes(x = {{Metric}}, Site)) +
     geom_boxplot(fill = SiteColors(), alpha = 0.8) +
-    theme_classic(base_family = "serif", base_size = 9) +
     labs(x = Label, y = "Site")
+
 }
 
 Plots <- list(Abundance <- PlotBySite(Abundance, Predictors$Label[1]),
@@ -54,22 +53,17 @@ AvgWeight <- PlotBySite(AvgWeight, Predictors$Label[7]),
 Effort <- Effort,
 Occlusion <- ggplot(SampleData %>% select(Site, Occlusion) %>% unique(), aes(y = Site, x = Occlusion, fill = Site)) +
   geom_bar(stat = "identity", fill = SiteColors(), alpha = .8) +
-  labs(x = "Percent Occlusion") +
-  theme_bw(),
+  labs(x = "Percent Occlusion"),
 Occlusion_SD <- ggplot(SampleData %>% select(Site, Occlusion_SD) %>% unique(), aes(y = Site, x = Occlusion_SD, fill = Site)) +
   geom_bar(stat = "identity", fill = SiteColors(), alpha = .8) +
-  labs(x = "Occlusion Variability (Standard Deviation)") +
-  theme_bw(),
+  labs(x = "Occlusion Variability (Standard Deviation)"),
+
 MudDominant <- ggplot(SampleData %>% select(Site, MudDominant) %>% unique(), aes(x = Site, y = MudDominant, fill = Site)) +
   geom_bar(stat = "identity", fill = SiteColors(), alpha = .8) +
-  labs(y = "Mud Dominance") +
-  scale_y_continuous(breaks = c(0,1), labels = c("Coarser Substrate", "Mud Dominant")) +
-  theme_bw(),
+  scale_y_continuous(breaks = c(0,1), labels = c("Coarser Substrate", "Mud Dominant")),
 Steepness <- ggplot(SampleData %>% select(Site, Steepness) %>% unique(), aes(x = Site, y = Steepness, fill = Site)) +
   geom_bar(stat = "identity", fill = SiteColors(), alpha = .8) +
-  labs(y = "Steepness Category (0, 1, 2)") +
-  scale_y_continuous(breaks = c(0,1,2), labels = c("Low", "Medium", "High")) +
-  theme_bw(),
+  scale_y_continuous(breaks = c(0,1,2), labels = c("Low", "Medium", "High")),
 DaylightHrs <- PlotBySite(DaylightHrs, Predictors$Label[13]),
 DaylightPercent <- PlotBySite(DaylightPercent, Predictors$Label[14]),
 SecchiDepth <- PlotBySite(SecchiDepth, Predictors$Label[15]),

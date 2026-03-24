@@ -17,13 +17,12 @@ library("tidyverse")
 
 
 load("data/WrangledData.RData")
-# load("output/models/DredgeListGLMM-CentEff.RData")
+load("output/models/DredgeListGLMM-ReducedMod.RData")
 
 rm(FamilyList, GearSpeciesCheck, GearSpeciesGrid, MergedData, Sample_Community_Matrix, SiteData, SpeciesList, Incidence_Matrices)
 
 # Source the global ggplot2 theme and aesthetic scales
 source("scripts/0_PlotTheme.R")
-
 # Data Wrangling ----------------------------------------------------------
 #**SCALING EFFORT AGAIN. Switched to GLMMs with Effort x Gear Interaction**
 # Removing semi-failed centipede net sample where nets were never fully inundated:
@@ -83,8 +82,6 @@ SummaryData_Effort <- SampleData %>%
   pivot_wider(names_from = Gear, values_from = c(Mean, SD)) %>%
   split(.$Predictor) %>%
   purrr::map(~ as.list(.x)[-1])
-# # Use this if needed to adjust to single net group values since three groups were deployed in each sample:
-# SummaryData_Effort$Effort$`Mean_Centipede Net` <- SummaryData_Effort$Effort$`Mean_Centipede Net`/3
 
 # NA-Free Dataset for Modelling
 geardat <- dat %>%
@@ -141,15 +138,7 @@ geardat <- dat %>%
   GearRich_Poisson <- glmmTMB(Richness ~ Gear*logEffort + (1 | Site),
                                data = geardat,
                                family = poisson)
-  
-  GearRich_GenPoisson <- glmmTMB(Richness ~ Gear*logEffort + (1 | Site),
-                              data = geardat,
-                              family = genpois)
-  
-  GearRich_ConMaxPois <- glmmTMB(Richness ~ Gear*logEffort + (1 | Site),
-                                 data = geardat,
-                                 family = compois)
-  
+
   GearRich_NBinom <- glmmTMB(Richness ~ Gear*logEffort + (1 | Site),
                               data = geardat,
                               family = nbinom1())
@@ -160,14 +149,12 @@ geardat <- dat %>%
   
   
   # Compare the models using AICc
-  model.sel(GearRich_Gaussian, GearRich_Poisson, GearRich_GenPoisson, GearRich_ConMaxPois, GearRich_NBinom, GearRich_NBinom2)
-  #** Poisson has lowest AICc, followed by NBinom1 (delta = 2.42)*
+  model.sel(GearRich_Gaussian, GearRich_Poisson, GearRich_NBinom, GearRich_NBinom2)
+  #** Poisson has lowest AICc, followed by NBinom1 (delta = 2.45)*
   
   # Diagnostic plots:
   simulateResiduals(fittedModel = GearRich_Gaussian, plot = TRUE)
   simulateResiduals(fittedModel = GearRich_Poisson, plot = TRUE) 
-  simulateResiduals(fittedModel = GearRich_GenPoisson, plot = TRUE) 
-  simulateResiduals(fittedModel = GearRich_ConMaxPois, plot = TRUE) 
   simulateResiduals(fittedModel = GearRich_NBinom, plot = TRUE)
   simulateResiduals(fittedModel = GearRich_NBinom2, plot = TRUE)
   
@@ -175,16 +162,6 @@ geardat <- dat %>%
   testDispersion(GearRich_Poisson)
   Anova(GearRich_Poisson) 
   summary(GearRich_Poisson)
-  
-  testOutliers(GearRich_GenPoisson) 
-  testDispersion(GearRich_GenPoisson)
-  Anova(GearRich_GenPoisson) 
-  summary(GearRich_GenPoisson)
-  
-  testOutliers(GearRich_ConMaxPois) 
-  testDispersion(GearRich_ConMaxPois)
-  Anova(GearRich_ConMaxPois) 
-  summary(GearRich_ConMaxPois)
   #* The base model for Richness should be glmmTMB(Richness ~ Gear*logEffort + (1 | Site), data = geardat, family = poisson)
   
   
@@ -279,56 +256,60 @@ get_pairwise_pvals(fit_sim, "Simpson")
 # --- 2. Create the Individual Plots with Nudged Layout ---
 
 # Abundance Plot (with pseudo-log y-axis)
-p_abund <- ggplot(geardat, aes(x = Gear, y = Abundance)) +
-  geom_point(shape = 16, color = "gray50", alpha = 0.5, position = position_nudge(x = -0.2)) +
-  geom_boxplot(aes(fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
-  geom_point(data = cld_abund, aes(y = response), size = 1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_errorbar(data = cld_abund, aes(y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_text(data = cld_abund, aes(y = asymp.UCL, label = str_trim(.group)), 
+p_abund <- ggplot(geardat, aes(x = as.numeric(as.factor(Gear)), y = Abundance)) +
+  geom_jitter(aes(x = as.numeric(as.factor(Gear)) - 0.2), shape = 16, color = "gray50", alpha = 0.75, width = 0.05, height = 0) +
+  geom_boxplot(aes(group = Gear, fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
+  geom_point(data = cld_abund, aes(x = as.numeric(as.factor(Gear)), y = response), size = 1, color = "red", position = position_nudge(x = 0.2)) +
+  geom_errorbar(data = cld_abund, aes(x = as.numeric(as.factor(Gear)), y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
+  geom_text(data = cld_abund, aes(x = as.numeric(as.factor(Gear)), y = asymp.UCL, label = str_trim(.group)), 
             # size = 4, 
             position = position_nudge(x = 0.3), hjust = 0) +
   scale_y_continuous(trans = scales::pseudo_log_trans(base = 10), breaks = c(0, 2, 10, 50, 150, 500), labels = label_number(accuracy = 1)) +
+  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear)))) +
   scale_fill_manual(values = GearColors()) +
   labs(y = "Abundance (log scale)", x = NULL, title = "Abundance", subtitle = "") +
   theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
 # Richness Plot
-p_rich <- ggplot(geardat, aes(x = Gear, y = Richness)) +
-  geom_point(shape = 16, color = "gray50", alpha = 0.5, position = position_nudge(x = -0.2)) +
-  geom_boxplot(aes(fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
-  geom_point(data = cld_rich, aes(y = rate), size = 1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_errorbar(data = cld_rich, aes(y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_text(data = cld_rich, aes(y = asymp.UCL, label = str_trim(.group)), 
+p_rich <- ggplot(geardat, aes(x = as.numeric(as.factor(Gear)), y = Richness)) +
+  geom_jitter(aes(x = as.numeric(as.factor(Gear)) - 0.2), shape = 16, color = "gray50", alpha = 0.75, width = 0.05, height = 0) +
+  geom_boxplot(aes(group = Gear, fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
+  geom_point(data = cld_rich, aes(x = as.numeric(as.factor(Gear)), y = rate), size = 1, color = "red", position = position_nudge(x = 0.2)) +
+  geom_errorbar(data = cld_rich, aes(x = as.numeric(as.factor(Gear)), y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
+  geom_text(data = cld_rich, aes(x = as.numeric(as.factor(Gear)), y = asymp.UCL, label = str_trim(.group)), 
             # size = 4, 
             position = position_nudge(x = 0.3), hjust = 0) +
   scale_y_continuous(breaks = c(0,3,6,9,12)) +
+  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear)))) +
   scale_fill_manual(values = GearColors()) +
   labs(y = "Species Richness", x = NULL, title ="Species Richness", subtitle = "") +
   theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
 # Shannon Diversity Plot
-p_div <- ggplot(geardat, aes(x = Gear, y = Shannon)) +
-  geom_point(shape = 16, color = "gray50", alpha = 0.5, position = position_nudge(x = -0.2)) +
-  geom_boxplot(aes(fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
-  geom_point(data = cld_div, aes(y = response), size = 1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_errorbar(data = cld_div, aes(y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_text(data = cld_div, aes(y = response, label = str_trim(.group)), 
+p_div <- ggplot(geardat, aes(x = as.numeric(as.factor(Gear)), y = Shannon)) +
+  geom_jitter(aes(x = as.numeric(as.factor(Gear)) - 0.2), shape = 16, color = "gray50", alpha = 0.75, width = 0.05, height = 0) +
+  geom_boxplot(aes(group = Gear, fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
+  geom_point(data = cld_div, aes(x = as.numeric(as.factor(Gear)), y = response), size = 1, color = "red", position = position_nudge(x = 0.2)) +
+  geom_errorbar(data = cld_div, aes(x = as.numeric(as.factor(Gear)), y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
+  geom_text(data = cld_div, aes(x = as.numeric(as.factor(Gear)), y = response, label = str_trim(.group)), 
             # size = 4, 
             position = position_nudge(x = 0.3), hjust = 0) +
+  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear)))) +
   scale_fill_manual(values = GearColors()) +
   labs(y = "Shannon Diversity", x = NULL, title = "Shannon Diversity", subtitle = "") +
   theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
 # Simpson Diversity Plot
-p_sim <- ggplot(geardat, aes(x = Gear, y = Simpson)) +
-  geom_point(shape = 16, color = "gray50", alpha = 0.5, position = position_nudge(x = -0.2)) +
-  geom_boxplot(aes(fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
-  geom_point(data = cld_sim, aes(y = response), size = 1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_errorbar(data = cld_sim, aes(y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_text(data = cld_sim, aes(y = response, label = str_trim(.group)), 
+p_sim <- ggplot(geardat, aes(x = as.numeric(as.factor(Gear)), y = Simpson)) +
+  geom_jitter(aes(x = as.numeric(as.factor(Gear)) - 0.2), shape = 16, color = "gray50", alpha = 0.75, width = 0.05, height = 0) +
+  geom_boxplot(aes(group = Gear, fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
+  geom_point(data = cld_sim, aes(x = as.numeric(as.factor(Gear)), y = response), size = 1, color = "red", position = position_nudge(x = 0.2)) +
+  geom_errorbar(data = cld_sim, aes(x = as.numeric(as.factor(Gear)), y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
+  geom_text(data = cld_sim, aes(x = as.numeric(as.factor(Gear)), y = response, label = str_trim(.group)), 
             # size = 4, 
             position = position_nudge(x = 0.3), hjust = 0) +
   scale_y_continuous(breaks = c(1,3,5,7)) +
+  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear)))) +
   scale_fill_manual(values = GearColors()) +
   labs(y = "Simpson Diversity", x = NULL, title = "Simpson Diversity", subtitle = "") +
   theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
@@ -351,34 +332,35 @@ final_tukey_plot
 
 # Global model for Abundance
 AbundIntFit <- glmmTMB(
-  Abundance ~ Gear * logEffort + Gear * (MudDominant + Steepness + Season + DaylightPercent + SecchiDepth + Occlusion + Temperature) +
-    (1 | Site),
+  Abundance ~ Gear * logEffort + Gear * (Occlusion + SecchiDepth + DaylightPercent) +
+    Steepness + MudDominant + Season + Temperature + (1 | Site),
   data = geardat,
   family = nbinom2, na.action = "na.fail"
 )
 
 # Global model for Richness
 RichIntFit <- glmmTMB(
-  Richness ~ Gear * logEffort +
-    Gear * (MudDominant + Steepness + Season + DaylightPercent +
-              SecchiDepth + Occlusion + Temperature) +
-    (1 | Site),
+  Richness ~ Gear * logEffort + Gear * (Occlusion + SecchiDepth + DaylightPercent) +
+    Steepness + MudDominant + Season + Temperature + (1 | Site),
   data = geardat,
   family = poisson(link = "log"), na.action = "na.fail"
 )
 
 # Global model for Shannon Diversity (Semi-continuous Data with Zeros)
 DivIntFit <- glmmTMB(
-  Shannon ~ Gear * (MudDominant + Steepness + Season + DaylightPercent +
-                      SecchiDepth + Occlusion + Temperature) +
-    (1 | Site),
+  Shannon ~ Gear * logEffort + Gear * (Occlusion + SecchiDepth + DaylightPercent) +
+    Steepness + MudDominant + Season + Temperature + (1 | Site),
   data = geardat,
   family = tweedie(link = "log"), na.action = "na.fail"
 )
 
 # Global model for Simpson Diversity (Semi-continuous Data with Zeros)
-SimIntFit <- glmmTMB(formula = (Simpson ~ Gear * (MudDominant + Steepness + Season + DaylightPercent +
-                      SecchiDepth + Occlusion + Temperature) + (1 | Site)), data = geardat, family = tweedie(), na.action = "na.fail")
+SimIntFit <- glmmTMB(
+  Simpson ~ Gear * logEffort + Gear * (Occlusion + SecchiDepth + DaylightPercent) +
+    Steepness + MudDominant + Season + Temperature + (1 | Site),
+  data = geardat,
+  family = tweedie(), na.action = "na.fail"
+)
 
 # Check VIFs on global models
 # --- 1. Variance Inflation Factors (Collinearity) ---
@@ -441,248 +423,237 @@ check_additive_vif(geardat, poisson, "Richness")
 check_additive_vif(geardat, tweedie(link="log"), "Shannon")
 check_additive_vif(geardat, tweedie(link="log"), "Simpson")
 
-# Dredging------------------------------------------------------------
-#** These will take some time (~30-90 mins. depending on computer specs) **
-# Create the cluster object (leave 1 core free for OS stability)
-clu <- makeCluster(detectCores() - 1)
-
-# Export your data frame to each worker node
-clusterExport(clu, varlist = c("geardat", "DivNullFit", "SimNullFit"))
-
-# Load the required modeling package on all workers
-clusterEvalQ(clu, library(glmmTMB))
-clusterEvalQ(clu, library(MuMIn))
-
-# --- 2. Run All dredge() Calls in Parallel ---
-
-# A. Dredge the Abundance model
-AbundIntTestAll <- dredge(
-  AbundIntFit,
-  fixed = ~cond(Gear) + cond(logEffort) + cond(Gear:logEffort),
-  extra = "r.squaredGLMM",
-  cluster = clu
-)
-# Filter out any models that failed to converge
-AbundIntTest <- subset(AbundIntTestAll, !is.na(AICc), recalc.delta = TRUE)
-
-# B. Dredge the Richness model
-RichIntTestAll <- dredge(
-  RichIntFit,
-  fixed = ~cond(Gear) + cond(logEffort) + cond(Gear:logEffort),
-  extra = "r.squaredGLMM",
-  cluster = clu
-)
-# Filter out any models that failed to converge
-RichIntTest <- subset(RichIntTestAll, !is.na(AICc), recalc.delta = TRUE)
-
-# C. Dredge the Shannon Diversity model
-DivIntTest <- dredge(
-  DivIntFit,
-  fixed = ~cond(Gear),
-  extra = list(R2.LR = function(x) r.squaredLR(x, null = DivNullFit)),
-  cluster = clu
-)
-
-# D. Dredge the Simpson Diversity model
-SimIntTestAll <- dredge(
-  SimIntFit,
-  fixed = ~cond(Gear),
-  extra = list(R2.LR = function(x) r.squaredLR(x, null = SimNullFit)),
-  cluster = clu
-)
-# Filter out any models that failed to converge
-SimIntTest <- subset(SimIntTestAll, !is.na(AICc), recalc.delta = TRUE)
-
-
-# --- 3. Stop the Cluster ---
-
-# IMPORTANT: Always stop the cluster to release system resources
-stopCluster(clu)
-
-    # Warning messages:
-    #   1: In finalizeTMB(TMBStruc, obj, fit, h, data.tmb.old) :
-    #   Model convergence problem; non-positive-definite Hessian matrix. See vignette('troubleshooting')
-    # 2: In finalizeTMB(TMBStruc, obj, fit, h, data.tmb.old) :
-    #   Model convergence problem; non-positive-definite Hessian matrix. See vignette('troubleshooting')
-  #It looks like a single model (19) failed to converge
-
-# #Play some tunes when done running.
-# shell.exec("https://youtu.be/yebNIHKAC4A?si=J7uIqIlqzWXGIdKg")
-
-
-# AIC Table Building ------------------------------------------------------
-# A new, more robust function to create a clean AICc table from a dredge object
-BuildTable <- function(dredge_object, response_name) {
-  dredge_subset <- subset(dredge_object, !nested(.))
-  model_calls <- attr(dredge_subset, "model.calls")
-  
-  predictor_strings <- purrr::map_chr(model_calls, function(call) {
-    terms <- attr(terms(call$formula), "term.labels")
-    terms <- grep("\\|", terms, value = TRUE, invert = TRUE)
-    sort_key <- dplyr::case_when(
-      terms == "logEffort" ~ 1,
-      stringr::str_detect(terms, "logEffort") & stringr::str_detect(terms, ":") ~ 2,
-      stringr::str_detect(terms, "Gear") ~ 3,
-      TRUE ~ 4
-    )
-    terms <- terms[order(sort_key, terms)]
-    if (length(terms) == 0) {
-      "(Intercept only)"
-    } else {
-      paste(terms, collapse = " + ")
-    }
-  })
-  
-  final_table_raw <- as.data.frame(dredge_subset) %>%
-    rownames_to_column(var = "Model") %>%
-    mutate(
-      Predictors = predictor_strings,
-      Response = response_name,
-      weight_tot = cumsum(weight)
-    )
-  
-  # --- New, robust R-squared logic ---
-  has_glmm_r2 <- "r.squaredGLMM1" %in% colnames(final_table_raw)
-  has_lr_r2 <- "R2.LR" %in% colnames(final_table_raw)
-  
-  if (has_glmm_r2) {
-    final_table_processed <- final_table_raw %>%
-      mutate(
-        R2_Marginal = r.squaredGLMM1,    # R2m (Fixed effects)
-        R2_Conditional = r.squaredGLMM2 # R2c (Fixed + Random)
-      )
-  } else if (has_lr_r2) {
-    final_table_processed <- final_table_raw %>%
-      mutate(
-        R2_Marginal = R2.LR # Pseudo-R2 (Fixed effects)
-      )
-  } else {
-    final_table_processed <- final_table_raw # No R2 columns found
-  }
-  
-  # Select the final, clean set of columns
-  final_table_clean <- final_table_processed %>%
-    select(
-      Response, Model, Predictors, df, logLik, AICc, delta, weight, 
-      any_of(c("R2_Marginal", "R2_Conditional")), # Select them if they exist
-      weight_tot
-    )
-  
-  return(final_table_clean)
-}
-
-# Build AIC Tables
-AbundIntTable <- BuildTable(AbundIntTest, "Abundance")
-RichIntTable <- BuildTable(RichIntTest, "Richness")
-DivIntTable <- BuildTable(DivIntTest, "Shannon")
-SimIntTable <- BuildTable(SimIntTest, "Simpson")
-
-# # Build Coefficient tables for top model or averaged model if multiple delta <= 2.0
-nrow(AbundIntTable %>% filter(delta <= 2)) # Single top model
-nrow(RichIntTable %>% filter(delta <= 2)) # 7 Similarly parsimonious models
-nrow(DivIntTable %>% filter(delta <= 2)) # 2 Similarly parsimonious models
-nrow(SimIntTable %>% filter(delta <= 2)) # Single top model
-
-TopAvgCoefs <- bind_rows(
-  # Abundance Top Model Coefficients (K=68)
-  coefTable(AbundIntTest[1,]) %>%
-    as.data.frame() %>%
-    rownames_to_column(var = "Predictor") %>%
-    mutate(Response = "Abundance", .before = 1) %>%
-    rename_with(
-      ~ .x %>%
-        str_remove("X4257.") %>%
-        str_replace("\\..", ".")) %>%
-    mutate(Predictor = Predictor %>%
-             str_remove_all("cond|disp") %>%
-             str_remove_all("[()]") %>%
-             str_replace_all(":", "*") %>%
-             str_replace_all("\\s", "") %>%
-             str_replace("^Int$", "Intercept")) %>%
-    select(-df) %>%
-    mutate(Model = "Top",Response = "Abundance", .before = 1)  %>%
-    rename("Std. Error" = Std.Error),
-  
-  # Richness Avg Model Coefficients
-  coefTable(model.avg(RichIntTest, subset = delta <= 2 & !nested(.))) %>%
-    as.data.frame() %>%
-    rownames_to_column(var = "Predictor") %>%
-    mutate(Model = "Averaged", Response = "Richness", .before = 1) %>%
-    mutate(Predictor = Predictor %>%
-             str_remove_all("cond|disp") %>%
-             str_remove_all("[()]") %>%
-             str_replace_all(":", "*") %>%
-             str_replace_all("\\s", "") %>%
-             str_replace("^Int$", "Intercept")) %>%
-    select(-df),
-
-  # Shannon Diversity Avg Model Coefficients
-  coefTable(model.avg(DivIntTest, subset = delta <= 2 & !nested(.))) %>%
-    as.data.frame() %>%
-    rownames_to_column(var = "Predictor") %>%
-    mutate(Model = "Averaged", Response = "Shannon", .before = 1) %>%
-    mutate(Predictor = Predictor %>%
-             str_remove_all("cond|disp") %>%
-             str_remove_all("[()]") %>%
-             str_replace_all(":", "*") %>%
-             str_replace_all("\\s", "") %>%
-             str_replace("^Int$", "Intercept")) %>%
-    select(-df),
-
-  # Simpson Diversity Top Model Coefficients
-  coefTable(SimIntTest[1,]) %>%
-    as.data.frame() %>%
-    rownames_to_column(var = "Predictor") %>%
-    mutate(Response = "Simpson", .before = 1) %>%
-    rename_with(
-      ~ .x %>%
-        str_remove("X259.") %>%
-        str_replace("\\..", ".")) %>%
-    mutate(Predictor = Predictor %>%
-             str_remove_all("cond|disp") %>%
-             str_remove_all("[()]") %>%
-             str_replace_all(":", "*") %>%
-             str_replace_all("\\s", "") %>%
-             str_replace("^Int$", "Intercept")) %>%
-    select(-df) %>%
-    mutate(Model = "Top",Response = "Simpson", .before = 1)  %>%
-    rename("Std. Error" = Std.Error)
-  
-) %>%
-  rename(SE = "Std. Error") %>%
-  mutate(LCL = Estimate - (1.96 * SE),
-         UCL = Estimate + (1.96 * SE),
-         Sig = if_else((LCL > 0 & UCL > 0) | (LCL < 0 & UCL < 0), "*", "")) %>% 
-  # --- Final Polishing Mutate (as in your working code) ---
-  mutate(
-    Predictor = Predictor %>%
-      str_replace_all("\\*", " * ") %>%
-      str_replace_all("logEffort", "Effort") %>% 
-      str_replace_all("GearCentipedeNet", "Centipede Net") %>%
-      str_replace_all("GearSeine", "Seine") %>%
-      str_replace_all("DaylightPercent", "Daylight Percent") %>%
-      str_replace_all("MudDominantTrue", "Mud Dominant") %>%
-      str_replace_all("SeasonRainy", "Rainy Season") %>%
-      str_replace_all("SecchiDepth", "Secchi Depth") %>%
-      str_replace_all("SteepnessMedium", "Steepness (Medium)") %>%
-      str_replace_all("SteepnessHigh", "Steepness (High)")
-  ) %>%
-  
-  # --- New, Final Sorting Logic ---
-  mutate(
-    sort_key = case_when(
-      Predictor == "Intercept" ~ 1,
-      Predictor == "logEffort" ~ 2,
-      str_detect(Predictor, "\\*") ~ 3, # All interactions
-      TRUE ~ 4 # All other main effects
-    )
-  ) %>%
-  arrange(Response, sort_key, Predictor) %>% # Sorts by Response, then your new rules
-  select(-sort_key) # Remove the helper column
+# # Dredging------------------------------------------------------------
+# #** These will take some time (~30-90 mins. depending on computer specs) **
+# # Create the cluster object (leave 1 core free for OS stability)
+# clu <- makeCluster(detectCores() - 1)
+# 
+# # Export your data frame to each worker node
+# clusterExport(clu, varlist = c("geardat", "DivNullFit", "SimNullFit"))
+# 
+# # Load the required modeling package on all workers
+# clusterEvalQ(clu, library(glmmTMB))
+# clusterEvalQ(clu, library(MuMIn))
+# 
+# # --- 2. Run All dredge() Calls in Parallel ---
+# 
+# # A. Dredge the Abundance model
+# AbundIntTest <- dredge(
+#   AbundIntFit,
+#   fixed = ~cond(Gear) + cond(logEffort) + cond(Gear:logEffort),
+#   extra = "r.squaredGLMM",
+#   cluster = clu
+# )
+# 
+# # B. Dredge the Richness model
+# RichIntTest <- dredge(
+#   RichIntFit,
+#   fixed = ~cond(Gear) + cond(logEffort) + cond(Gear:logEffort),
+#   extra = "r.squaredGLMM",
+#   cluster = clu
+# )
+# 
+# # C. Dredge the Shannon Diversity model
+# DivIntTest <- dredge(
+#   DivIntFit,
+#   fixed = ~cond(Gear),
+#   extra = list(R2.LR = function(x) r.squaredLR(x, null = DivNullFit)),
+#   cluster = clu
+# )
+# 
+# # D. Dredge the Simpson Diversity model
+# SimIntTestAll <- dredge(
+#   SimIntFit,
+#   fixed = ~cond(Gear),
+#   extra = list(R2.LR = function(x) r.squaredLR(x, null = SimNullFit)),
+#   cluster = clu
+# )
+# # Filter out any models that failed to converge
+# SimIntTest <- subset(SimIntTestAll, !is.na(AICc), recalc.delta = TRUE)
+# 
+# 
+# # --- 3. Stop the Cluster ---
+# 
+# # IMPORTANT: Always stop the cluster to release system resources
+# stopCluster(clu)
+# 
+# # #Play some tunes when done running.
+# # shell.exec("https://youtu.be/yebNIHKAC4A?si=J7uIqIlqzWXGIdKg")
+# 
+# 
+# # AIC Table Building ------------------------------------------------------
+# # A new, more robust function to create a clean AICc table from a dredge object
+# BuildTable <- function(dredge_object, response_name) {
+#   dredge_subset <- subset(dredge_object, !nested(.))
+#   model_calls <- attr(dredge_subset, "model.calls")
+#   
+#   predictor_strings <- purrr::map_chr(model_calls, function(call) {
+#     terms <- attr(terms(call$formula), "term.labels")
+#     terms <- grep("\\|", terms, value = TRUE, invert = TRUE)
+#     sort_key <- dplyr::case_when(
+#       terms == "logEffort" ~ 1,
+#       stringr::str_detect(terms, "logEffort") & stringr::str_detect(terms, ":") ~ 2,
+#       stringr::str_detect(terms, "Gear") ~ 3,
+#       TRUE ~ 4
+#     )
+#     terms <- terms[order(sort_key, terms)]
+#     if (length(terms) == 0) {
+#       "(Intercept only)"
+#     } else {
+#       paste(terms, collapse = " + ")
+#     }
+#   })
+#   
+#   final_table_raw <- as.data.frame(dredge_subset) %>%
+#     rownames_to_column(var = "Model") %>%
+#     mutate(
+#       Predictors = predictor_strings,
+#       Response = response_name,
+#       weight_tot = cumsum(weight)
+#     )
+#   
+#   # --- New, robust R-squared logic ---
+#   has_glmm_r2 <- "r.squaredGLMM1" %in% colnames(final_table_raw)
+#   has_lr_r2 <- "R2.LR" %in% colnames(final_table_raw)
+#   
+#   if (has_glmm_r2) {
+#     final_table_processed <- final_table_raw %>%
+#       mutate(
+#         R2_Marginal = r.squaredGLMM1,    # R2m (Fixed effects)
+#         R2_Conditional = r.squaredGLMM2 # R2c (Fixed + Random)
+#       )
+#   } else if (has_lr_r2) {
+#     final_table_processed <- final_table_raw %>%
+#       mutate(
+#         R2_Marginal = R2.LR # Pseudo-R2 (Fixed effects)
+#       )
+#   } else {
+#     final_table_processed <- final_table_raw # No R2 columns found
+#   }
+#   
+#   # Select the final, clean set of columns
+#   final_table_clean <- final_table_processed %>%
+#     select(
+#       Response, Model, Predictors, df, logLik, AICc, delta, weight, 
+#       any_of(c("R2_Marginal", "R2_Conditional")), # Select them if they exist
+#       weight_tot
+#     )
+#   
+#   return(final_table_clean)
+# }
+# 
+# # Build AIC Tables
+# AbundIntTable <- BuildTable(AbundIntTest, "Abundance")
+# RichIntTable <- BuildTable(RichIntTest, "Richness")
+# DivIntTable <- BuildTable(DivIntTest, "Shannon")
+# SimIntTable <- BuildTable(SimIntTest, "Simpson")
+# 
+# # # Build Coefficient tables for top model or averaged model if multiple delta <= 2.0
+# nrow(AbundIntTable %>% filter(delta <= 2)) # Single top model
+# nrow(RichIntTable %>% filter(delta <= 2)) # 7 Similarly parsimonious models
+# nrow(DivIntTable %>% filter(delta <= 2)) # 4 Similarly parsimonious models
+# nrow(SimIntTable %>% filter(delta <= 2)) # Single top model
+# 
+# TopAvgCoefs <- bind_rows(
+#   # Abundance Top Model Coefficients (K=68)
+#   coefTable(AbundIntTest[1,]) %>%
+#     as.data.frame() %>%
+#     rownames_to_column(var = "Predictor") %>%
+#     mutate(Response = "Abundance", .before = 1) %>%
+#     rename_with(
+#       ~ .x %>%
+#         str_remove("X141.") %>%
+#         str_replace("\\..", ".")) %>%
+#     mutate(Predictor = Predictor %>%
+#              str_remove_all("cond|disp") %>%
+#              str_remove_all("[()]") %>%
+#              str_replace_all(":", "*") %>%
+#              str_replace_all("\\s", "") %>%
+#              str_replace("^Int$", "Intercept")) %>%
+#     select(-df) %>%
+#     mutate(Model = "Top",Response = "Abundance", .before = 1)  %>%
+#     rename("Std. Error" = Std.Error),
+#   
+#   # Richness Avg Model Coefficients
+#   coefTable(model.avg(RichIntTest, subset = delta <= 2 & !nested(.))) %>%
+#     as.data.frame() %>%
+#     rownames_to_column(var = "Predictor") %>%
+#     mutate(Model = "Averaged", Response = "Richness", .before = 1) %>%
+#     mutate(Predictor = Predictor %>%
+#              str_remove_all("cond|disp") %>%
+#              str_remove_all("[()]") %>%
+#              str_replace_all(":", "*") %>%
+#              str_replace_all("\\s", "") %>%
+#              str_replace("^Int$", "Intercept")) %>%
+#     select(-df),
+# 
+#   # Shannon Diversity Avg Model Coefficients
+#   coefTable(model.avg(DivIntTest, subset = delta <= 2 & !nested(.))) %>%
+#     as.data.frame() %>%
+#     rownames_to_column(var = "Predictor") %>%
+#     mutate(Model = "Averaged", Response = "Shannon", .before = 1) %>%
+#     mutate(Predictor = Predictor %>%
+#              str_remove_all("cond|disp") %>%
+#              str_remove_all("[()]") %>%
+#              str_replace_all(":", "*") %>%
+#              str_replace_all("\\s", "") %>%
+#              str_replace("^Int$", "Intercept")) %>%
+#     select(-df),
+# 
+#   # Simpson Diversity Top Model Coefficients
+#   coefTable(SimIntTest[1,]) %>%
+#     as.data.frame() %>%
+#     rownames_to_column(var = "Predictor") %>%
+#     mutate(Response = "Simpson", .before = 1) %>%
+#     rename_with(
+#       ~ .x %>%
+#         str_remove("X1.") %>%
+#         str_replace("\\..", ".")) %>%
+#     mutate(Predictor = Predictor %>%
+#              str_remove_all("cond|disp") %>%
+#              str_remove_all("[()]") %>%
+#              str_replace_all(":", "*") %>%
+#              str_replace_all("\\s", "") %>%
+#              str_replace("^Int$", "Intercept")) %>%
+#     select(-df) %>%
+#     mutate(Model = "Top",Response = "Simpson", .before = 1)  %>%
+#     rename("Std. Error" = Std.Error)
+#   
+# ) %>%
+#   rename(SE = "Std. Error") %>%
+#   mutate(LCL = Estimate - (1.96 * SE),
+#          UCL = Estimate + (1.96 * SE),
+#          Sig = if_else((LCL > 0 & UCL > 0) | (LCL < 0 & UCL < 0), "*", "")) %>% 
+#   # --- Final Polishing Mutate (as in your working code) ---
+#   mutate(
+#     Predictor = Predictor %>%
+#       str_replace_all("\\*", " * ") %>%
+#       str_replace_all("logEffort", "Effort") %>% 
+#       str_replace_all("GearCentipedeNet", "Centipede Net") %>%
+#       str_replace_all("GearSeine", "Seine") %>%
+#       str_replace_all("DaylightPercent", "Daylight Percent") %>%
+#       str_replace_all("MudDominantTrue", "Mud Dominant") %>%
+#       str_replace_all("SeasonRainy", "Rainy Season") %>%
+#       str_replace_all("SecchiDepth", "Secchi Depth") %>%
+#       str_replace_all("SteepnessMedium", "Steepness (Medium)") %>%
+#       str_replace_all("SteepnessHigh", "Steepness (High)")
+#   ) %>%
+#   
+#   # --- New, Final Sorting Logic ---
+#   mutate(
+#     sort_key = case_when(
+#       Predictor == "Intercept" ~ 1,
+#       Predictor == "logEffort" ~ 2,
+#       str_detect(Predictor, "\\*") ~ 3, # All interactions
+#       TRUE ~ 4 # All other main effects
+#     )
+#   ) %>%
+#   arrange(Response, sort_key, Predictor) %>% # Sorts by Response, then your new rules
+#   select(-sort_key) # Remove the helper column
 
 
-# # Saving to Excel
-# # Set Number Format
+# Saving to Excel
+# Set Number Format
 # options("openxlsx2.numFmt" = "#,##0.00")
 # 
 # # Single xlsx file with 1) Stacked AIC tables per gear, 2) Stacked coefficient tables for top models, 3) Individual gear/response tables
@@ -690,7 +661,7 @@ TopAvgCoefs <- bind_rows(
 #   list(
 #     "ModelList" = bind_rows(AbundIntTable, RichIntTable, DivIntTable, SimIntTable),
 #     "TopAvgCoefficients" = TopAvgCoefs),
-#   file = "output/tables/AICTables_GLMM-CentEff.xlsx", as_table = TRUE, tableStyle = "TableStyleLight1", na.strings = ""
+#   file = "output/tables/AICTables_GLMM-ReducedMod.xlsx", as_table = TRUE, tableStyle = "TableStyleLight1", na.strings = ""
 # )
 # 
 # # Creating list of top/averaged models
@@ -712,7 +683,7 @@ TopAvgCoefs <- bind_rows(
 #   DivInt   = DivIntAvg,
 #   SimInt   = SimIntTop
 # )
-# save(geardat, ScaleData, AbundIntFit, RichIntFit, DivIntFit, SimIntFit, AbundIntTest, AbundIntTestAll, RichIntTest, RichIntTestAll, DivIntTest, SimIntTest, SimIntTestAll, TopAvgCoefs, AbundIntTable, RichIntTable, DivIntTable, SimIntTable, AvgMods, file = "output/models/DredgeListGLMM-CentEff.RData")
+# save(geardat, ScaleData, AbundIntFit, RichIntFit, DivIntFit, SimIntFit, AbundIntTest, RichIntTest, DivIntTest, SimIntTest, SimIntTestAll, TopAvgCoefs, AbundIntTable, RichIntTable, DivIntTable, SimIntTable, AvgMods, file = "output/models/DredgeListGLMM-ReducedMod.RData")
 
 # Marginal Effects ----------------------------------- 
 # Dummy plot to extract shared legends
@@ -776,16 +747,11 @@ p_abund_daylight <- estimate_relation(model = AvgMods$AbundInt, by = c("Daylight
   labs(title = "Daylight x Gear", subtitle = "", y = "Abundance", x = "Percent Daylight") +
   scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%")) +
   gear_scales + 
-  theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+  theme(legend.position.inside = c(0.2,0.8), legend.title = element_blank(), legend.position = "inside", plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-p_abund_steepness <- estimate_relation(model = AvgMods$AbundInt, by = c("Steepness", "Gear"), fixed = list(logEffort = 0)) %>%
-  ggplot(aes(x = Steepness, y = Predicted, color = Gear, shape = Gear)) +
-  geom_point(position = position_dodge(width = 0.4), size = 2) + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), position = position_dodge(width = 0.4), width = 0.2) +
-  labs(title = "Steepness x Gear", subtitle = "", x = "Steepness", y = "Abundance") +
-  scale_x_discrete(limits = c("Low", "Medium", "High")) + 
-  scale_y_continuous(limits = c(NA, 300)) +
-  gear_scales + 
-  theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+plot_data_abund_occ <- create_plot_data(AvgMods$AbundInt, AbundIntFit, "Occlusion"); p_abund_occ <- ggplot(plot_data_abund_occ, aes(x = Occlusion, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Occlusion", subtitle = "", x = "Percent Occlusion", y = "Abundance") + scale_x_continuous(breaks = (c(17, 22, 27) - ScaleData$Occlusion$Mean) / ScaleData$Occlusion$SD, labels = c("17%", "22%", "27%")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_abund_season <- create_plot_data(AvgMods$AbundInt, AbundIntFit, "Season"); p_abund_season <- ggplot(plot_data_abund_season, aes(x = Season, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Season", subtitle = "", x = "Season", y = "Abundance") + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
 newdata_effort_abund <- insight::get_datagrid(AvgMods$AbundInt, by = c("logEffort = [fivenum]", "Gear"), preserve_range = FALSE, Steepness = "Medium")
 preds_effort_abund <- predict(AvgMods$AbundInt, newdata = newdata_effort_abund, se.fit = TRUE, type = "link")
@@ -802,8 +768,8 @@ p_abund_effort_list <- c("Cast Net", "Centipede Net", "Seine") %>%
     filter(plot_data_effort_abund, Gear == gear_name) %>% ggplot(aes(x = logEffort, y = Predicted, color = Gear, fill = Gear)) +
       geom_line(linewidth = 1) + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, linetype = 0) +
       labs(title = main_title, subtitle = gear_name, x = x_lab, y = "Abundance\n(log scale)") + x_scale +
-      scale_y_log10(breaks = c(1, 5, 25, 100), labels = scales::label_number(accuracy = 1)) +
-      coord_cartesian(xlim = scaled_limits, ylim = c(1, 150), expand = expansion(mult = 0)) + # Apply corrected x-axis limits
+      scale_y_log10(breaks = c(1, 5, 25, 125, 625), labels = scales::label_number(accuracy = 1)) +
+      coord_cartesian(xlim = scaled_limits, ylim = c(1, 625), expand = expansion(mult = 0)) + # Apply corrected x-axis limits
       scale_color_manual(values = GearColors()[gear_name]) + scale_fill_manual(values = GearColors()[gear_name]) +
       theme(plot.subtitle = element_text(hjust = 1), plot.title = element_text(vjust = -1), legend.position = "none", plot.title.position = "plot")
   })
@@ -811,9 +777,8 @@ p_abund_effort_list <- c("Cast Net", "Centipede Net", "Seine") %>%
 p_abund_effort <- plot_grid(plotlist = p_abund_effort_list, ncol = 1, align = "v")
 
 # --- Assemble Abundance Grid ---
-left_col_abund <- plot_grid(p_abund_daylight, p_abund_steepness, ncol = 1)
-main_plot_area_abund <- plot_grid(left_col_abund, p_abund_effort, ncol = 2)
-final_plot_abund <- plot_grid(main_plot_area_abund, shared_legend_horiz, ncol = 1, rel_heights = c(1, 0.05)) + plot_theme
+left_col_abund <- plot_grid(p_abund_daylight, p_abund_occ, p_abund_season, ncol = 1, align = "v")
+final_plot_abund <- plot_grid(left_col_abund, p_abund_effort, ncol = 2) + plot_theme
 
 
 # 3. Richness Figure
@@ -838,43 +803,76 @@ p_rich_effort_list <- c("Cast Net", "Centipede Net", "Seine") %>%
       scale_color_manual(values = GearColors()[gear_name]) + scale_fill_manual(values = GearColors()[gear_name]) +
       theme(plot.subtitle = element_text(hjust = 1), legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
   })
-plot_data_mud <- create_plot_data(AvgMods$RichInt, RichIntFit, "MudDominant", "Gear"); p_rich_mud <- ggplot(plot_data_mud, aes(x = MudDominant, y = Predicted, color = Gear, shape = Gear)) + geom_point(position = position_dodge(width = 0.4), size = 3) + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), position = position_dodge(width = 0.4), width = 0.2) + labs(title = "Substrate x Gear", subtitle = "", x = "Substrate", y = "Richness") + scale_x_discrete(labels = c("False" = "Other", "True" = "Mud"), limits = rev)+ coord_cartesian(ylim = c(NA,20)) + gear_scales + theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
 # --- Main Effect Plots ---
-plot_data_season <- create_plot_data(AvgMods$RichInt, RichIntFit, "Season"); p_rich_season <- ggplot(plot_data_season, aes(x = Season, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Season", subtitle = "", x = "Season", y = "Richness") + coord_cartesian(ylim = c(NA,10)) + theme(plot.title.position = "plot")
+plot_data_rich_mud <- create_plot_data(AvgMods$RichInt, RichIntFit, "MudDominant"); p_rich_mud <- ggplot(plot_data_rich_mud, aes(x = MudDominant, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Substrate", subtitle = "", x = "Substrate", y = "Richness") + scale_x_discrete(labels = c("False" = "Other", "True" = "Mud Dominant"), limits = rev)+ 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-plot_data_daylight <- create_plot_data(AvgMods$RichInt, RichIntFit, "DaylightPercent"); p_rich_daylight <- ggplot(plot_data_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Richness") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+plot_data_season <- create_plot_data(AvgMods$RichInt, RichIntFit, "Season"); p_rich_season <- ggplot(plot_data_season, aes(x = Season, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Season", subtitle = "", x = "Season", y = "Richness") + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-plot_data_secchi <- create_plot_data(AvgMods$RichInt, RichIntFit, "SecchiDepth"); p_rich_secchi <- ggplot(plot_data_secchi, aes(x = SecchiDepth, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Secchi Depth", subtitle = "", x = "Secchi Depth (cm)", y = "Richness") + scale_x_continuous(breaks = (c(20, 75, 125, 175) - ScaleData$SecchiDepth$Mean) / ScaleData$SecchiDepth$SD, labels = c("20", "75", "125", "175")) + coord_cartesian(ylim = c(NA,10)) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+plot_data_daylight <- create_plot_data(AvgMods$RichInt, RichIntFit, "DaylightPercent"); p_rich_daylight <- ggplot(plot_data_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Richness") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%")) + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-plot_data_occ <- create_plot_data(AvgMods$RichInt, RichIntFit, "Occlusion"); p_rich_occ <- ggplot(plot_data_occ, aes(x = Occlusion, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Occlusion", subtitle = "", x = "Percent Occlusion", y = "Richness") + scale_x_continuous(breaks = (c(17, 22, 27) - ScaleData$Occlusion$Mean) / ScaleData$Occlusion$SD, labels = c("17%", "22%", "27%")) + coord_cartesian(ylim = c(NA,10)) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+plot_data_secchi <- create_plot_data(AvgMods$RichInt, RichIntFit, "SecchiDepth"); p_rich_secchi <- ggplot(plot_data_secchi, aes(x = SecchiDepth, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Secchi Depth", subtitle = "", x = "Secchi Depth (cm)", y = "Richness") + scale_x_continuous(breaks = (c(20, 75, 125, 175) - ScaleData$SecchiDepth$Mean) / ScaleData$SecchiDepth$SD, labels = c("20", "75", "125", "175")) + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-plot_data_steepness <- create_plot_data(AvgMods$RichInt, RichIntFit, "Steepness"); p_rich_steepness <- ggplot(plot_data_steepness, aes(x = Steepness, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Steepness", subtitle = "", x = "Steepness", y = "Richness") + scale_x_discrete(limits = c("Low", "Medium", "High")) + coord_cartesian(ylim = c(NA,10)) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+plot_data_occ <- create_plot_data(AvgMods$RichInt, RichIntFit, "Occlusion"); p_rich_occ <- ggplot(plot_data_occ, aes(x = Occlusion, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Occlusion", subtitle = "", x = "Percent Occlusion", y = "Richness") + scale_x_continuous(breaks = (c(17, 22, 27) - ScaleData$Occlusion$Mean) / ScaleData$Occlusion$SD, labels = c("17%", "22%", "27%")) + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_steepness <- create_plot_data(AvgMods$RichInt, RichIntFit, "Steepness"); p_rich_steepness <- ggplot(plot_data_steepness, aes(x = Steepness, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Steepness", subtitle = "", x = "Steepness", y = "Richness") + scale_x_discrete(limits = c("Low", "Medium", "High")) + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
 # --- Assemble Richness Grid ---
-main_plot_grid_rich <- plot_grid(p_rich_effort_list[[1]], p_rich_mud, p_rich_daylight, p_rich_effort_list[[2]], p_rich_season, p_rich_secchi, p_rich_effort_list[[3]], p_rich_steepness, p_rich_occ, ncol = 3, align = "hv", axis = "tblr", rel_widths = c(1,0.85,1))
-final_plot_rich <- plot_grid(main_plot_grid_rich, shared_legend_horiz, ncol = 1, rel_heights = c(1, 0.05)) + plot_theme
+final_plot_rich <- plot_grid(p_rich_effort_list[[1]], p_rich_mud, p_rich_daylight, p_rich_effort_list[[2]], p_rich_season, p_rich_secchi, p_rich_effort_list[[3]], p_rich_steepness, p_rich_occ, ncol = 3, align = "hv", axis = "tblr", rel_widths = c(1,0.85,1)) + plot_theme
 
 
 # 4. Diversity Figures
 
 # --- Shannon Diversity ---
-plot_data_div_mud <- create_plot_data(AvgMods$DivInt, DivIntFit, "MudDominant", "Gear"); p_div_mud <- ggplot(plot_data_div_mud, aes(x = MudDominant, y = Predicted, color = Gear, shape = Gear)) + geom_point(position = position_dodge(width = 0.4), size = 3) + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), position = position_dodge(width = 0.4), width = 0.2) + labs(title = "Substrate x Gear", subtitle = "", x = "Substrate", y = "Shannon Diversity") + scale_x_discrete(labels = c("False" = "Other", "True" = "Mud"), limits = rev) + scale_y_continuous(limits = c(NA, 8)) + gear_scales + theme(legend.position = "right", legend.title = element_blank(), plot.title.position = "plot", plot.title = element_text(vjust = -1))
+plot_data_div_gear <- create_plot_data(AvgMods$DivInt, DivIntFit, "Gear")
+p_div_gear <- ggplot(plot_data_div_gear, aes(x = Gear, y = Predicted, color = Gear)) + geom_point(size = 3) + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, linewidth = 1) + labs(title = "Gear", subtitle = "", x = "Gear", y = "Shannon Diversity") +  gear_scales + theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-plot_data_div_daylight <- create_plot_data(AvgMods$DivInt, DivIntFit, "DaylightPercent"); p_div_daylight <- ggplot(plot_data_div_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Shannon Diversity") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%"))+ coord_cartesian(ylim = c(NA,7)) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+plot_data_div_effort <- create_plot_data(AvgMods$DivInt, DivIntFit, "logEffort")
 
-plot_data_div_temp <- create_plot_data(AvgMods$DivInt, DivIntFit, "Temperature"); p_div_temp <- ggplot(plot_data_div_temp, aes(x = Temperature, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Temperature", subtitle = "", x = "Temperature (°C)", y = "Shannon Diversity") + scale_x_continuous(breaks = (c(27, 32, 37) - ScaleData$Temperature$Mean) / ScaleData$Temperature$SD, labels = c("27", "32", "37"))  + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+p_div_effort <- ggplot(plot_data_div_effort, aes(x = logEffort, y = Predicted)) + 
+  geom_line(linewidth = 1, color = "black") + 
+  geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + 
+  labs(
+    title = "Sampling Effort", 
+    subtitle = "", 
+    x = "Relative Effort (SD)",
+    y = "Shannon Diversity"
+  ) + 
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-plot_data_div_steepness <- create_plot_data(AvgMods$DivInt, DivIntFit, "Steepness"); p_div_steepness <- ggplot(plot_data_div_steepness, aes(x = Steepness, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + scale_y_continuous(limits = c(NA, 5)) + labs(title = "Steepness", subtitle = "", x = "Steepness", y = "Shannon Diversity") + scale_x_discrete(limits = c("Low", "Medium", "High")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+plot_data_div_mud <- create_plot_data(AvgMods$DivInt, DivIntFit, "MudDominant")
+p_div_mud <- ggplot(plot_data_div_mud, aes(x = MudDominant, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Substrate", subtitle = "", x = "Substrate", y = "Shannon Diversity") + scale_x_discrete(labels = c("False" = "Other", "True" = "Mud Dominant"), limits = rev) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-# final_plot_div <- plot_grid(p_div_mud, p_div_daylight, p_div_steepness, p_div_temp, ncol = 2, align = "h", axis = "bltr") + plot_theme
+plot_data_div_daylight <- create_plot_data(AvgMods$DivInt, DivIntFit, "DaylightPercent")
+p_div_daylight <- ggplot(plot_data_div_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Shannon Diversity") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%"))+theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
 
-final_plot_div <- plot_grid(plot_grid(p_div_mud + theme(legend.position = "none"), p_div_daylight, ncol = 2, align = "hv"), shared_legend_horiz, plot_grid(p_div_steepness, p_div_temp, ncol = 2, align = "hv"), ncol = 1, axis = "tblr", rel_heights = c(1,0.1,1)) + plot_theme
+plot_data_div_occ <- create_plot_data(AvgMods$DivInt, DivIntFit, "Occlusion")
+p_div_occ <- ggplot(plot_data_div_occ, aes(x = Occlusion, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Occlusion", subtitle = "", x = "Percent Occlusion", y = "Shannon Diversity") + scale_x_continuous(breaks = (c(17, 22, 27) - ScaleData$Occlusion$Mean) / ScaleData$Occlusion$SD, labels = c("17%", "22%", "27%")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_div_steepness <- create_plot_data(AvgMods$DivInt, DivIntFit, "Steepness")
+p_div_steepness <- ggplot(plot_data_div_steepness, aes(x = Steepness, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Steepness", subtitle = "", x = "Steepness", y = "Shannon Diversity") + scale_x_discrete(limits = c("Low", "Medium", "High")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+
+final_plot_div <- plot_grid(p_div_gear, p_div_daylight, p_div_effort, p_div_mud, p_div_occ, p_div_steepness, ncol = 3, align = "hv") + plot_theme
 
 # --- Simpson Diversity ---
-plot_data_sim_mud <- create_plot_data(AvgMods$SimInt, SimIntFit, "MudDominant", "Gear"); p_sim_mud <- ggplot(plot_data_sim_mud, aes(x = MudDominant, y = Predicted, color = Gear, shape = Gear)) + geom_point(position = position_dodge(width = 0.4), size = 3) + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), position = position_dodge(width = 0.4), width = 0.2) + labs(title = "Substrate x Gear", subtitle = "", x = "Substrate", y = "Simpson Diversity") + scale_x_discrete(labels = c("False" = "Other", "True" = "Mud"), limits = rev) + gear_scales + theme(legend.position = "bottom", legend.title = element_blank(), plot.title.position = "plot", plot.title = element_text(vjust = -1))
-plot_data_sim_daylight <- create_plot_data(AvgMods$SimInt, SimIntFit, "DaylightPercent"); p_sim_daylight <- ggplot(plot_data_sim_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Simpson Diversity") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%")) + coord_cartesian(ylim = c(NA,4)) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
-final_plot_sim <- plot_grid(p_sim_mud, p_sim_daylight, ncol = 2, align = "v", axis = "tblr") + plot_theme
+plot_data_sim_gear <- create_plot_data(AvgMods$SimInt, SimIntFit, "Gear"); p_sim_gear <- ggplot(plot_data_sim_gear, aes(x = Gear, y = Predicted, color = Gear)) + geom_point(size = 3) + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, linewidth = 1) + labs(title = "Gear", subtitle = "", x = "Gear", y = "Simpson Diversity") + gear_scales + theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_sim_daylight <- create_plot_data(AvgMods$SimInt, SimIntFit, "DaylightPercent"); p_sim_daylight <- ggplot(plot_data_sim_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Simpson Diversity") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+final_plot_sim <- plot_grid(p_sim_gear, p_sim_daylight, ncol = 2, align = "hv", axis = "tblr", rel_widths = c(1, 1.25)) + plot_theme
 
 
 # 5. Display Final Plots
@@ -884,18 +882,248 @@ final_plot_div
 final_plot_sim
 
 
-# --- Save the Final Plots ---
-ggsave(plot = final_plot_abund, "output/plots/MarginalEffects_Abundance_Original.eps", device = cairo_ps,  width = 5.62, height = 7.25, units = "in")
-ggsave(plot = final_plot_abund, "output/plots/MarginalEffects_Abundance_Original.png",  width = 5.62, height = 7.25, units = "in", dpi = 600)
+# ggsave(plot = final_plot_abund, "output/plots/MarginalEffects_Abundance.eps", device = cairo_ps,  width = 5.62, height = 7.25, units = "in")
+# ggsave(plot = final_plot_abund, "output/plots/MarginalEffects_Abundance.png",  width = 5.62, height = 7.25, units = "in", dpi = 600)
 
-ggsave(plot = final_plot_rich, "output/plots/MarginalEffects_Richness_Original.eps", device = cairo_ps,  width = 5.62, height = 7.25, units = "in")
-ggsave(plot = final_plot_rich, "output/plots/MarginalEffects_Richness_Original.png",  width = 5.62, height = 7.25, units = "in", dpi = 600)
+# ggsave(plot = final_plot_rich, "output/plots/MarginalEffects_Richness.eps", device = cairo_ps,  width = 5.62, height = 7.25, units = "in")
+# ggsave(plot = final_plot_rich, "output/plots/MarginalEffects_Richness.png",  width = 5.62, height = 7.25, units = "in", dpi = 600)
 
-ggsave(plot = final_plot_div, "output/plots/MarginalEffects_Shannon_Original.eps", device = cairo_ps,  width = 5.62, height = 4.21, units = "in")
-ggsave(plot = final_plot_div, "output/plots/MarginalEffects_Shannon_Original.png",  width = 5.62, height = 4.21, units = "in", dpi = 600)
+# ggsave(plot = final_plot_div, "output/plots/MarginalEffects_Shannon.eps", device = cairo_ps,  width = 5.62, height = 4.21, units = "in")
 
-ggsave(plot = final_plot_sim, "output/plots/MarginalEffects_Simpson_Original.eps", device = cairo_ps,  width = 5.62, height = 3.75, units = "in")
-ggsave(plot = final_plot_sim, "output/plots/MarginalEffects_Simpson_Original.png",  width = 5.62, height = 3.75, units = "in", dpi = 600)
+shared_legend_vert <- get_legend(
+  ggplot(data = geardat, aes(x = Gear, y = Abundance, color = Gear, shape = Gear, linetype = Gear, fill = Gear)) +
+    geom_ribbon(aes(ymin = 0, ymax = 0), alpha = 0.2) + geom_line(linewidth = 1) + geom_point(size = 2) +
+    scale_color_manual(values = GearColors()) + scale_fill_manual(values = GearColors()) +
+    scale_shape_manual(values = GearShapes) + scale_linetype_manual(values = GearLines()) +
+    guides(color = guide_legend(nrow = 3)) +
+    theme(legend.position = "top", legend.title = element_blank(), legend.key.width = rel(1), legend.direction = "vertical")
+)
 
 
-# Values to Report in Manuscript ------------------------------------------
+# 1. Helper Functions for Plotting
+
+# --- A. Helper to create a back-transformed effort axis ---
+create_effort_axis_scale <- function(gear_name, scale_df, raw_breaks) {
+  gear_params <- filter(scale_df, Gear == gear_name)
+  mu <- gear_params$Mean
+  sigma <- gear_params$SD
+  scaled_breaks <- (log(raw_breaks) - mu) / sigma
+  formatted_labels <- ifelse(raw_breaks < 5, sprintf("%.1f", raw_breaks), sprintf("%.0f", raw_breaks))
+  scale_x_continuous(breaks = scaled_breaks, labels = formatted_labels)
+}
+
+# --- B. Main helper function for Richness & Diversity plots ---
+create_plot_data <- function(model, global_model, predictor, grouping_var = NULL) {
+  by_vars <- if (is.null(grouping_var)) predictor else c(predictor, grouping_var)
+  grid_args <- list(global_model, by = by_vars, preserve_range = FALSE)
+  if (predictor != "Steepness") grid_args$Steepness <- "Medium"
+  if ("logEffort" %in% names(coef(model)) && predictor != "logEffort") {
+    grid_args$logEffort <- 0
+  }
+  newdata <- do.call(insight::get_datagrid, grid_args)
+  newdata$Site <- NA
+  
+  preds <- predict(model, newdata = newdata, se.fit = TRUE, type = "link")
+  plot_data <- data.frame(newdata, Predicted = exp(preds$fit), CI_low = exp(preds$fit - 1.96 * preds$se.fit), CI_high = exp(preds$fit + 1.96 * preds$se.fit))
+  
+  if (is.null(grouping_var)) {
+    plot_data <- plot_data %>% group_by(!!sym(predictor)) %>% summarize(across(c(Predicted, CI_low, CI_high), \(x) mean(x, na.rm = TRUE)))
+  }
+  return(plot_data)
+}
+
+
+# 2. Abundance Figure
+
+# --- Create Component Plots ---
+p_abund_daylight <- estimate_relation(model = AvgMods$AbundInt, by = c("DaylightPercent = [fivenum]", "Gear"), fixed = list(logEffort = 0, Steepness = "Medium"), preserve_range = FALSE) %>%
+  ggplot(aes(x = DaylightPercent, y = Predicted, color = Gear, fill = Gear, linetype = Gear)) +
+  geom_line(linewidth = 1) + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, linetype = 0) +
+  labs(title = "Daylight x Gear", subtitle = "", y = "Abundance", x = "Percent Daylight") +
+  scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%")) +
+  gear_scales + 
+  theme(legend.position.inside = c(0.2,0.8), legend.title = element_blank(), legend.position = "inside", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_abund_occ <- create_plot_data(AvgMods$AbundInt, AbundIntFit, "Occlusion"); p_abund_occ <- ggplot(plot_data_abund_occ, aes(x = Occlusion, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Occlusion", subtitle = "", x = "Percent Occlusion", y = "Abundance") + scale_x_continuous(breaks = (c(17, 22, 27) - ScaleData$Occlusion$Mean) / ScaleData$Occlusion$SD, labels = c("17%", "22%", "27%")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_abund_season <- create_plot_data(AvgMods$AbundInt, AbundIntFit, "Season"); p_abund_season <- ggplot(plot_data_abund_season, aes(x = Season, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Season", subtitle = "", x = "Season", y = "Abundance") + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+newdata_effort_abund <- insight::get_datagrid(AvgMods$AbundInt, by = c("logEffort = [fivenum]", "Gear"), preserve_range = FALSE, Steepness = "Medium")
+preds_effort_abund <- predict(AvgMods$AbundInt, newdata = newdata_effort_abund, se.fit = TRUE, type = "link")
+plot_data_effort_abund <- data.frame(newdata_effort_abund, Predicted = exp(preds_effort_abund$fit), CI_low = exp(preds_effort_abund$fit - 1.96 * preds_effort_abund$se.fit), CI_high = exp(preds_effort_abund$fit + 1.96 * preds_effort_abund$se.fit))
+p_abund_effort_list <- c("Cast Net", "Centipede Net", "Seine") %>%
+  map(~ {
+    gear_name <- .x; main_title <- if (gear_name == "Cast Net") "Effort x Gear" else ""; x_lab <- switch(gear_name, "Cast Net" = "Throws", "Centipede Net" = "Net-Group-Hours", "Seine" = "Hauls"); raw_breaks <- switch(gear_name, "Cast Net" = exp(seq(log(10), log(20), length.out = 5)), "Centipede Net" = exp(seq(log(8), log(19), length.out = 5)), "Seine" = exp(seq(log(1.0), log(2.0), length.out = 5))); x_scale <- create_effort_axis_scale(gear_name, ScaleDataEffort, raw_breaks)
+    
+    # Calculate scaled limits for the x-axis
+    gear_params <- filter(ScaleDataEffort, Gear == gear_name)
+    raw_limits <- range(raw_breaks)
+    scaled_limits <- (log(raw_limits) - gear_params$Mean) / gear_params$SD
+    
+    filter(plot_data_effort_abund, Gear == gear_name) %>% ggplot(aes(x = logEffort, y = Predicted, color = Gear, fill = Gear)) +
+      geom_line(linewidth = 1) + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, linetype = 0) +
+      labs(title = main_title, subtitle = gear_name, x = x_lab, y = "Abundance\n(log scale)") + x_scale +
+      scale_y_log10(breaks = c(1, 5, 25, 125, 625), labels = scales::label_number(accuracy = 1)) +
+      coord_cartesian(xlim = scaled_limits, ylim = c(1, 625), expand = expansion(mult = 0)) + # Apply corrected x-axis limits
+      scale_color_manual(values = GearColors()[gear_name]) + scale_fill_manual(values = GearColors()[gear_name]) +
+      theme(plot.subtitle = element_text(hjust = 1), plot.title = element_text(vjust = -1), legend.position = "none", plot.title.position = "plot")
+  })
+
+p_abund_effort <- plot_grid(plotlist = p_abund_effort_list, ncol = 1, align = "v")
+
+# --- Assemble Abundance Grid ---
+left_col_abund <- plot_grid(p_abund_daylight, p_abund_occ, p_abund_season, ncol = 1, align = "v")
+final_plot_abund <- plot_grid(left_col_abund, p_abund_effort, ncol = 2) + plot_theme
+
+
+# 3. Richness Figure
+
+# --- Interaction Plots ---
+newdata_effort_rich <- insight::get_datagrid(AvgMods$RichInt, by = c("logEffort = [fivenum]", "Gear"), preserve_range = FALSE, Steepness = "Medium")
+newdata_effort_rich$Site <- NA
+preds_effort_rich <- predict(AvgMods$RichInt, newdata = newdata_effort_rich, se.fit = TRUE, type = "link")
+plot_data_effort_rich <- data.frame(newdata_effort_rich, Predicted = exp(preds_effort_rich$fit), CI_low = exp(preds_effort_rich$fit - 1.96 * preds_effort_rich$se.fit), CI_high = exp(preds_effort_rich$fit + 1.96 * preds_effort_rich$se.fit))
+p_rich_effort_list <- c("Cast Net", "Centipede Net", "Seine") %>%
+  map(~ {
+    gear_name <- .x; main_title <- if (gear_name == "Cast Net") "Effort x Gear" else ""; x_lab <- switch(gear_name, "Cast Net" = "Throws", "Centipede Net" = "Net-Group-Hours", "Seine" = "Hauls"); raw_breaks <- switch(gear_name, "Cast Net" = exp(seq(log(10), log(20), length.out = 5)), "Centipede Net" = exp(seq(log(8), log(19), length.out = 5)), "Seine" = exp(seq(log(1.0), log(2.0), length.out = 5))); x_scale <- create_effort_axis_scale(gear_name, ScaleDataEffort, raw_breaks)
+    
+    gear_params <- filter(ScaleDataEffort, Gear == gear_name)
+    raw_limits <- range(raw_breaks)
+    scaled_limits <- (log(raw_limits) - gear_params$Mean) / gear_params$SD
+    
+    ggplot(filter(plot_data_effort_rich, Gear == gear_name), aes(x = logEffort, y = Predicted, color = Gear, fill = Gear)) +
+      geom_line(linewidth = 1) + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, linetype = 0) +
+      labs(title = main_title, subtitle = gear_name, x = x_lab, y = "Richness") + x_scale +
+      coord_cartesian(xlim = scaled_limits, ylim = c(0, 30), expand = expansion(mult = 0)) +
+      scale_color_manual(values = GearColors()[gear_name]) + scale_fill_manual(values = GearColors()[gear_name]) +
+      theme(plot.subtitle = element_text(hjust = 1), legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+  })
+
+# --- Main Effect Plots ---
+plot_data_rich_mud <- create_plot_data(AvgMods$RichInt, RichIntFit, "MudDominant"); p_rich_mud <- ggplot(plot_data_rich_mud, aes(x = MudDominant, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Substrate", subtitle = "", x = "Substrate", y = "Richness") + scale_x_discrete(labels = c("False" = "Other", "True" = "Mud Dominant"), limits = rev)+ 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_season <- create_plot_data(AvgMods$RichInt, RichIntFit, "Season"); p_rich_season <- ggplot(plot_data_season, aes(x = Season, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Season", subtitle = "", x = "Season", y = "Richness") + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_daylight <- create_plot_data(AvgMods$RichInt, RichIntFit, "DaylightPercent"); p_rich_daylight <- ggplot(plot_data_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Richness") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%")) + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_secchi <- create_plot_data(AvgMods$RichInt, RichIntFit, "SecchiDepth"); p_rich_secchi <- ggplot(plot_data_secchi, aes(x = SecchiDepth, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Secchi Depth", subtitle = "", x = "Secchi Depth (cm)", y = "Richness") + scale_x_continuous(breaks = (c(20, 75, 125, 175) - ScaleData$SecchiDepth$Mean) / ScaleData$SecchiDepth$SD, labels = c("20", "75", "125", "175")) + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_occ <- create_plot_data(AvgMods$RichInt, RichIntFit, "Occlusion"); p_rich_occ <- ggplot(plot_data_occ, aes(x = Occlusion, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Occlusion", subtitle = "", x = "Percent Occlusion", y = "Richness") + scale_x_continuous(breaks = (c(17, 22, 27) - ScaleData$Occlusion$Mean) / ScaleData$Occlusion$SD, labels = c("17%", "22%", "27%")) + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_steepness <- create_plot_data(AvgMods$RichInt, RichIntFit, "Steepness"); p_rich_steepness <- ggplot(plot_data_steepness, aes(x = Steepness, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Steepness", subtitle = "", x = "Steepness", y = "Richness") + scale_x_discrete(limits = c("Low", "Medium", "High")) + 
+  scale_y_continuous(breaks = c(3,5,7,9), minor_breaks = NULL) + coord_cartesian(ylim = c(2,10)) +
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+# --- Assemble Richness Grid ---
+final_plot_rich <- plot_grid(p_rich_effort_list[[1]], p_rich_mud, p_rich_daylight, p_rich_effort_list[[2]], p_rich_season, p_rich_secchi, p_rich_effort_list[[3]], p_rich_steepness, p_rich_occ, ncol = 3, align = "hv", axis = "tblr", rel_widths = c(1,0.85,1)) + plot_theme
+
+
+# 4. Diversity Figures
+
+# --- Shannon Diversity ---
+plot_data_div_gear <- create_plot_data(AvgMods$DivInt, DivIntFit, "Gear")
+p_div_gear <- ggplot(plot_data_div_gear, aes(x = Gear, y = Predicted, color = Gear)) + geom_point(size = 2) + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2) + labs(title = "Gear", subtitle = "", x = "Gear", y = "Shannon Diversity") +  gear_scales + theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_div_effort <- create_plot_data(AvgMods$DivInt, DivIntFit, "logEffort")
+
+p_div_effort <- ggplot(plot_data_div_effort, aes(x = logEffort, y = Predicted)) + 
+  geom_line(linewidth = 1, color = "black") + 
+  geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + 
+  labs(
+    title = "Sampling Effort", 
+    subtitle = "", 
+    x = "Relative Effort (SD)",
+    y = "Shannon Diversity"
+  ) + 
+  theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_div_mud <- create_plot_data(AvgMods$DivInt, DivIntFit, "MudDominant")
+p_div_mud <- ggplot(plot_data_div_mud, aes(x = MudDominant, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Substrate", subtitle = "", x = "Substrate", y = "Shannon Diversity") + scale_x_discrete(labels = c("False" = "Other", "True" = "Mud Dominant"), limits = rev) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_div_daylight <- create_plot_data(AvgMods$DivInt, DivIntFit, "DaylightPercent")
+p_div_daylight <- ggplot(plot_data_div_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Shannon Diversity") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%"))+theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_div_occ <- create_plot_data(AvgMods$DivInt, DivIntFit, "Occlusion")
+p_div_occ <- ggplot(plot_data_div_occ, aes(x = Occlusion, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Occlusion", subtitle = "", x = "Percent Occlusion", y = "Shannon Diversity") + scale_x_continuous(breaks = (c(17, 22, 27) - ScaleData$Occlusion$Mean) / ScaleData$Occlusion$SD, labels = c("17%", "22%", "27%")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_div_steepness <- create_plot_data(AvgMods$DivInt, DivIntFit, "Steepness")
+p_div_steepness <- ggplot(plot_data_div_steepness, aes(x = Steepness, y = Predicted)) + geom_point(size = 2, color = "black") + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2, color = "black") + labs(title = "Steepness", subtitle = "", x = "Steepness", y = "Shannon Diversity") + scale_x_discrete(limits = c("Low", "Medium", "High")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+
+final_plot_div <- plot_grid(p_div_gear, p_div_daylight, p_div_effort, p_div_mud, p_div_occ, p_div_steepness, ncol = 3, align = "hv") + plot_theme
+
+# --- Simpson Diversity ---
+plot_data_sim_gear <- create_plot_data(AvgMods$SimInt, SimIntFit, "Gear"); p_sim_gear <- ggplot(plot_data_sim_gear, aes(x = Gear, y = Predicted, color = Gear)) + geom_point(size = 2) + geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2) + labs(title = "Gear", subtitle = "", x = "Gear", y = "Simpson Diversity") + gear_scales + theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+plot_data_sim_daylight <- create_plot_data(AvgMods$SimInt, SimIntFit, "DaylightPercent"); p_sim_daylight <- ggplot(plot_data_sim_daylight, aes(x = DaylightPercent, y = Predicted)) + geom_line(linewidth = 1, color = "black") + geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.2, fill = "grey50") + labs(title = "Daylight", subtitle = "", x = "Percent Daylight", y = "Simpson Diversity") + scale_x_continuous(breaks = (c(0, 25, 50, 75, 100) - ScaleData$DaylightPercent$Mean) / ScaleData$DaylightPercent$SD, labels = c("0%", "25%", "50%", "75%", "100%")) + theme(plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+final_plot_sim <- plot_grid(p_sim_gear, p_sim_daylight, ncol = 2, align = "hv", axis = "tblr", rel_widths = c(1, 1.25)) + plot_theme
+
+
+# 5. Display Final Plots
+final_plot_abund
+final_plot_rich
+final_plot_div
+final_plot_sim
+
+
+# ggsave(plot = final_plot_abund, "output/plots/MarginalEffects_Abundance.eps", device = cairo_ps,  width = 5.62, height = 7.25, units = "in")
+# ggsave(plot = final_plot_abund, "output/plots/MarginalEffects_Abundance.png",  width = 5.62, height = 7.25, units = "in", dpi = 600)
+# 
+# ggsave(plot = final_plot_rich, "output/plots/MarginalEffects_Richness.eps", device = cairo_ps,  width = 5.62, height = 7.25, units = "in")
+# ggsave(plot = final_plot_rich, "output/plots/MarginalEffects_Richness.png",  width = 5.62, height = 7.25, units = "in", dpi = 600)
+# 
+# ggsave(plot = final_plot_div, "output/plots/MarginalEffects_Shannon.eps", device = cairo_ps,  width = 5.62, height = 4.21, units = "in")
+# ggsave(plot = final_plot_div, "output/plots/MarginalEffects_Shannon.png",  width = 5.62, height = 4.21, units = "in", dpi = 600)
+# 
+# ggsave(plot = final_plot_sim, "output/plots/MarginalEffects_Simpson.eps", device = cairo_ps,  width = 5.62, height = 3.75, units = "in")
+# ggsave(plot = final_plot_sim, "output/plots/MarginalEffects_Simpson.png",  width = 5.62, height = 3.75, units = "in", dpi = 600)
+
+# --- 6. 2x2 Metric ~ Gear Summary ---
+
+p_abund_effort_combined <- ggplot(plot_data_effort_abund, aes(x = logEffort, y = Predicted, color = Gear, fill = Gear, linetype = Gear)) +
+  geom_line(linewidth = 1) + 
+  geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.1, linetype = 0) +
+  labs(title = "Abundance", x = "Relative Effort (SD)", y = "Abundance\n(log scale)") + 
+  scale_y_log10(labels = scales::label_number(accuracy = 1)) +
+  gear_scales + 
+  theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+p_rich_effort_combined <- ggplot(plot_data_effort_rich, aes(x = logEffort, y = Predicted, color = Gear, fill = Gear, linetype = Gear)) +
+  geom_line(linewidth = 1) + 
+  geom_ribbon(aes(ymin = CI_low, ymax = CI_high), alpha = 0.1, linetype = 0) +
+  labs(title = "Richness", x = "Relative Effort (SD)", y = "Richness\n(log scale)") + 
+  scale_y_log10(labels = scales::label_number(accuracy = 1)) +
+  gear_scales +
+  theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
+
+p_div_gear_clean <- p_div_gear + labs(title = "Shannon Diversity", x = "Gear", y = "Shannon Diversity") + theme(legend.position = "none")
+p_sim_gear_clean <- p_sim_gear + labs(title = "Simpson Diversity", x = "Gear", y = "Simpson Diversity") + theme(legend.position = "none")
+
+# Layout components
+row1 <- plot_grid(p_abund_effort_combined, p_rich_effort_combined, ncol = 2, align = "hv", axis = "tblr")
+row2 <- plot_grid(p_div_gear_clean, p_sim_gear_clean, ncol = 2, align = "hv", axis = "tblr")
+
+shared_legend_horiz <- get_legend(
+  p_abund_effort_combined + 
+    theme(legend.position = "bottom", legend.title = element_blank(), legend.key.width = rel(2))
+)
+
+# Assemble with legend in the middle
+final_metric_gear_2x2_legend <- plot_grid(
+  row1, shared_legend_horiz, row2,
+  ncol = 1, rel_heights = c(1, 0.15, 1)
+)
+
+final_metric_gear_2x2_legend
+# ggsave(plot = final_metric_gear_2x2_legend, "output/plots/Metric_Gear_2x2.png", width = 8, height = 8, units = "in", dpi = 300)

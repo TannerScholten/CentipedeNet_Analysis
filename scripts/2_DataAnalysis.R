@@ -10,13 +10,15 @@ library(eulerr)
 library(tidyverse)
 # library(devtools)
 library(openxlsx2)
-library(extrafont)
 library(parallel)
 
 # Load pre-wrangled dataframes and remove what I don't need right now
 load("data/WrangledData.RData")
 # load("output/models/Rarefaction.RData")
-# load("output/models/Rarefaction_New.RData")
+
+# Source the global ggplot2 theme and aesthetic scales
+source("scripts/0_PlotTheme.R")
+
 rm(FamilyList, Sample_Community_Matrix)
 
 # Remove likely invalid centipede net sample (Tivives visit 2) where nets were never fully submerged
@@ -34,16 +36,6 @@ StudyWide_Incidence_Matrix <- MergedData %>%
   mutate(across(where(is.numeric), ~ replace(., . != 0, 1))) %>%
   filter(!is.na(Species)) %>%
   column_to_rownames(var = "Species")
-
-# Source the global ggplot2 theme and aesthetic scales
-source("scripts/0_PlotTheme.R")
-
-# Load Windows fonts from device and set serif as default.
-loadfonts(device = "win")
-par(family = "serif")
-
-# # Something to fix margin issues with cowplot and Aptos font (overlapping margins in grid plots).
-# set_null_device(cairo_pdf)
 
 
 # Summary Stats -----------------------------------------------------------
@@ -71,8 +63,8 @@ Tables$`Study Summary` <- MergedData %>%
     "Total Catch (n)" = sum(!is.na(Species)),
     "Individual Measurements" = sum(!is.na(StandardLength_mm)),
     "Species Richness" = length(unique(na.omit(Species))),
-    "Shannon Diversity" = exp(diversity(t(StudyWide_Incidence_Matrix), groups = "none", index = "shannon")),
-    "Simpson Diversity" = diversity(t(StudyWide_Incidence_Matrix), groups = "none", index = "invsimpson"),
+    "Shannon Diversity" = exp(diversity(rowSums(StudyWide_Incidence_Matrix), index = "shannon")),
+    "Simpson Diversity" = diversity(rowSums(StudyWide_Incidence_Matrix), index = "invsimpson"),
     "Total Biomass (kg)" = sum(Weight_g, AverageWeight_g, na.rm = T) / 1000,
     "Minimum Weight (g)" = min(Weight_g, AverageWeight_g, na.rm = T),
     "Maximum Weight (g)" = max(Weight_g, AverageWeight_g, na.rm = T),
@@ -91,7 +83,7 @@ SampleData %>%
 
 # # iNEXT Analysis
 # # Species Accumulation Curves & Rarefaction with iNEXT --------------------
-##** These take 15-30 minutes to run**
+# #** These take 15-30 minutes to run**
 # 
 # # 1. Define the sets to analyze
 # inext_sets <- list(
@@ -131,7 +123,7 @@ SampleData %>%
 # All_Gears           <- inext_results$All_Gears
 # 
 # # 4. Coverage estimates (separate call as it's quick once richness is known)
-# SampleEst <- estimateD(Incidence_Matrices, q = 0, datatype = "incidence_raw", 
+# SampleEst <- estimateD(Incidence_Matrices, q = 0, datatype = "incidence_raw",
 #                         base = "coverage", level = c(0.75, .95), nboot = 1000) %>%
 #   rename("Samples (n)" = t) %>%
 #   mutate(SC = paste(100 * round(SC, digits = 2), "% Coverage")) %>%
@@ -148,7 +140,7 @@ SampleData %>%
 #   file = "output/models/Rarefaction.RData"
 # )
 
-## Sample Coverage Plots for Solo Gears & Combo Gears ----------------------
+# Sample Coverage Plots for Solo Gears & Combo Gears ----------------------
 # #**Template**
 # # This is a mess, but it allows us to customize pretty much everything about the ggiNEXT plots. Most importantly, using distinct linetypes.
 # # Get the ggplot build object
@@ -202,135 +194,149 @@ SampleData %>%
 # 
 # # Create the gtable
 # Plot_Name <- ggplot_gtable(gb)
-# #
-# # # Display the plot
+# 
+# # Display the plot
 # plot(Plot_Name)
-# If it's a grid you're lookin' for:
+# 
+# # #If it's a grid you're lookin' for:
 # Grid_Name <- plot_grid(Plot_Name1, Plot_Name2, nrow = 2, labels = Letters(), label_x = 0.11, align = "hv", label_fontface = "plain", label_size = 12, label_fontfamily = "serif")
+# 
+# # ggsave(plot = Plot_Name, "output/plots/Plot_Name.png", width = 6, height = 4, units = "in")
 
-# ggsave(plot = Plot_Name, "output/plots/Plot_Name.png", width = 6, height = 4, units = "in")
 
+## Sample Coverage Plots for Solo Gears & Combo Gears ----------------------
 
-# Sample Coverage Plots
 # --- Streamlining: Create a common theme for both plots ---
 common_theme <- function() {
-  theme_classic(base_family = "serif", base_size = 9) +
-    theme(
+  theme(
       panel.background = element_rect(fill = "transparent"),
       legend.background = element_rect(fill = "transparent"),
       legend.title = element_blank(),
       legend.position = "inside",
       legend.position.inside = c(1, 0),
       legend.justification = c(1, 0),
-      legend.key.spacing.y = unit(0.05, "in")
+      legend.key.spacing.y = unit(0.05, "in"),
+      legend.key.height = unit(0.15, "in"),
+      legend.key.width = unit(0.35, "in")
     )
 }
 
-# --- Singles_Coverage_Plot (Refactored with Final Legend Fix) ---
+# --- Singles_Coverage_Plot (Native ggplot2 Approach) ---
 
-# 1. Create the initial ggplot object | Sample Completeness Curve
-p_singles <- ggiNEXT(Gear_Out_Single_Raw, type = 2, color.var = "Assemblage", se = TRUE) +
+# 1. Extract and format data
+df_singles <- fortify(Gear_Out_Single_Raw, type = 2) %>%
+  mutate(Assemblage = factor(Assemblage, levels = c("Cast Net", "Centipede Net", "Seine")))
+
+# 2. Build mapping vectors based on factor levels
+single_names <- levels(df_singles$Assemblage)
+single_colors <- GearColorsAll()[single_names]
+single_shapes <- unlist(GearShapes[single_names])
+single_lines  <- GearLines()[single_names]
+
+# 3. Build the plot
+Singles_Coverage_Plot <- ggplot(df_singles, aes(x = x, y = y, color = Assemblage, fill = Assemblage)) +
+  # Confidence Ribbon
+  geom_ribbon(aes(ymin = y.lwr, ymax = y.upr), alpha = 0.2, color = NA, show.legend = FALSE) +
+
+  # Rarefaction Lines (Thick and Bold)
+  geom_line(data = subset(df_singles, Method == "Rarefaction"), 
+            aes(linetype = Assemblage), linewidth = 1, alpha = 1) +
+  
+  # Extrapolation Lines (Thin and slightly faded)
+  geom_line(data = subset(df_singles, Method == "Extrapolation"), 
+            aes(linetype = Assemblage), linewidth = 0.8, alpha = 0.75) +
+  # Observed Points
+  geom_point(data = subset(df_singles, Method == "Observed"), 
+             aes(shape = Assemblage), size = 3) +
+             
+  # Scales
+  scale_color_manual(values = single_colors) +
+  scale_fill_manual(values = single_colors) +
+  scale_shape_manual(values = single_shapes) +
+  scale_linetype_manual(values = single_lines) +
+  
+  # 4. Use Guides to Force Linetypes into the Legend
+  guides(
+    color = guide_legend(
+      keywidth = unit(0.6, "in"),
+      override.aes = list(
+        linetype = single_lines,
+        shape = single_shapes,
+        fill = single_colors,
+        linewidth = 0.9,
+        size = 2.5 
+      )
+    ),
+    linetype = "none",
+    shape = "none",
+    fill = "none"
+  ) +
+
+  # Labels and Formatting
   labs(x = "Sampling Units", y = "Sample Coverage") +
-  scale_shape_manual(values = GearShapes[c("Cast Net", "Centipede Net", "Seine")]) +
-  scale_color_manual(values = GearColorsAll()[c("Cast Net", "Centipede Net", "Seine")], aesthetics = c("colour", "fill")) +
   scale_x_continuous(expand = c(0.01, 0.01)) +
   scale_y_continuous(expand = c(0.01, 0.01), labels = scales::percent) +
-  common_theme() +
-  # This scale overrides the default linetype legend from ggiNEXT and removes it
-  scale_linetype_manual(values = c("rarefaction" = "solid", "extrapolation" = "dashed"), guide = "none") +
+  common_theme()
+
+
+# --- Combos_Coverage_Plot (Native ggplot2 Approach) ---
+
+# 1. Extract and format data
+df_combos <- fortify(Gear_Out_Combos_Raw, type = 2) %>%
+  mutate(Assemblage = factor(Assemblage, levels = c("All Gears", "Cast Net & Centipede Net", "Cast Net & Seine", "Centipede Net & Seine")))
+
+# 2. Build certain vectors for manual mapping to ensure fixed legend order
+combo_names <- levels(df_combos$Assemblage)
+combo_colors <- GearColorsAll()[combo_names]
+combo_shapes <- unlist(GearShapes[combo_names])
+combo_lines  <- GearLines()[combo_names]
+
+# 3. Build the plot
+Combos_Coverage_Plot <- ggplot(df_combos, aes(x = x, y = y, color = Assemblage, fill = Assemblage)) +
+  # Confidence Ribbon
+  # Using drastically lower alpha (0.08) to prevent muddying where ribbons overlap
+  geom_ribbon(aes(ymin = y.lwr, ymax = y.upr), alpha = 0.08, color = NA, show.legend = FALSE) +
+  
+  # Rarefaction Lines (Thick and Bold)
+  geom_line(data = subset(df_combos, Method == "Rarefaction"), 
+            aes(linetype = Assemblage), linewidth = 1, alpha = 1) +
+  
+  # Extrapolation Lines (Thin and slightly faded)
+  geom_line(data = subset(df_combos, Method == "Extrapolation"), 
+            aes(linetype = Assemblage), linewidth = 0.8, alpha = 0.7) +
+            
+  # Observed Points
+  geom_point(data = subset(df_combos, Method == "Observed"), 
+             aes(shape = Assemblage), size = 3) +
+             
+  # Scales (Named vectors ensure correct mapping)
+  scale_color_manual(values = combo_colors) +
+  scale_fill_manual(values = combo_colors) +
+  scale_shape_manual(values = combo_shapes) +
+  scale_linetype_manual(values = combo_lines) +
+  
+  # 4. Use Guides to Force Linetypes into the Legend
   guides(
-    fill = "none",
+    color = guide_legend(
+      keywidth = unit(0.6, "in"),
+      override.aes = list(
+        linetype = combo_lines,
+        shape = combo_shapes,
+        fill = combo_colors, # Ensure shapes are filled
+        linewidth = 0.9,
+        size = 2.5 
+      )
+    ),
+    linetype = "none",
     shape = "none",
-    color = guide_legend(override.aes = list(
-      shape = GearShapes[c("Cast Net", "Centipede Net", "Seine")],
-      size = 2,
-      stroke = 1,
-      linewidth = 0.4,
-      alpha = 0.7,
-      linetype = unlist(GearLineTypes[c("Cast Net", "Centipede Net", "Seine")])
-    ))
-  )
-
-# 2. Apply the fix to remove ribbon from legend
-for (i in seq_along(p_singles$layers)) {
-  if (inherits(p_singles$layers[[i]]$geom, "GeomRibbon")) {
-    p_singles$layers[[i]]$show.legend <- FALSE
-  }
-}
-
-# 3. Build the modified plot object
-gb_singles <- ggplot_build(p_singles)
-
-gb_singles$data[[1]] <- gb_singles$data[[1]] %>% mutate(size = 3)
-gb_singles$data[[2]] <- gb_singles$data[[2]] %>%
-  mutate(
-    linewidth = 0.75,
-    linetype = case_when(
-      group >= 4 ~ "15",
-      group == 1 ~ GearLineTypes$`Cast Net`,
-      group == 2 ~ GearLineTypes$`Centipede Net`,
-      group == 3 ~ GearLineTypes$Seine
-    )
-  )
-
-gb_singles$plot$theme$legend.key.height <- unit(0.15, "in")
-gb_singles$plot$theme$legend.key.width <- unit(0.35, "in")
-
-Singles_Coverage_Plot <- ggplot_gtable(gb_singles)
-
-
-# --- Combos_Coverage_Plot (Refactored with Final Legend Fix) ---
-
-# 1. Create the initial ggplot object | Sample Completeness Curve
-p_combos <- ggiNEXT(Gear_Out_Combos_Raw, type = 2, color.var = "Assemblage", se = TRUE) +
+    fill = "none"
+  ) +
+  # Labels and Formatting
   labs(x = "Sampling Units", y = NULL) +
-  scale_shape_manual(values = GearShapes[c("All Gears", "Cast Net & Centipede Net", "Cast Net & Seine", "Centipede Net & Seine")]) +
-  scale_color_manual(values = GearColorsAll()[c("All Gears", "Cast Net & Centipede Net", "Cast Net & Seine", "Centipede Net & Seine")], aesthetics = c("colour", "fill")) +
   scale_x_continuous(expand = c(0.01, 0.01)) +
   scale_y_continuous(expand = c(0.01, 0.01), labels = scales::percent, limits = c(.20, NA)) +
-  common_theme() +
-  # This scale overrides the default linetype legend from ggiNEXT and removes it
-  scale_linetype_manual(values = c("rarefaction" = "solid", "extrapolation" = "dashed"), guide = "none") +
-  guides(
-    fill = "none",
-    shape = "none",
-    color = guide_legend(override.aes = list(
-      shape = GearShapes[c("All Gears", "Cast Net & Centipede Net", "Cast Net & Seine", "Centipede Net & Seine")],
-      size = 2,
-      stroke = 1,
-      linewidth = 0.4,
-      alpha = 0.7,
-      linetype = unlist(GearLineTypes[c("All Gears", "Cast Net & Centipede Net", "Cast Net & Seine", "Centipede Net & Seine")])
-    ))
-  )
+  common_theme()
 
-# 2. Apply the fix to remove ribbon from legend
-for (i in seq_along(p_combos$layers)) {
-  if (inherits(p_combos$layers[[i]]$geom, "GeomRibbon")) {
-    p_combos$layers[[i]]$show.legend <- FALSE
-  }
-}
-
-# 3. Build the modified plot object
-gb_combos <- ggplot_build(p_combos)
-
-gb_combos$data[[1]] <- gb_combos$data[[1]] %>% mutate(size = 3)
-gb_combos$data[[2]] <- gb_combos$data[[2]] %>%
-  mutate(
-    linewidth = 0.75,
-    linetype = case_when(
-      group >= 5 ~ "15",
-      group == 1 ~ GearLineTypes$`All Gears`,
-      group == 2 ~ GearLineTypes$`Cast Net & Centipede Net`,
-      group == 3 ~ GearLineTypes$`Cast Net & Seine`,
-      group == 4 ~ GearLineTypes$`Centipede Net & Seine`
-    )
-  )
-
-gb_combos$plot$theme$legend.key.height <- unit(0.15, "in")
-gb_combos$plot$theme$legend.key.width <- unit(0.35, "in")
-
-Combos_Coverage_Plot <- ggplot_gtable(gb_combos)
 
 
 # --- Combine Plots ---
@@ -340,186 +346,120 @@ Coverage_Grid <-
 # Display the final plot
 plot(Coverage_Grid)
 
-# --- Save the Final Plot for Publication ---
-ggsave(plot = Coverage_Grid, 
-       filename = "output/plots/Coverage_2Panel_Final_Fig6.eps", 
-       device = cairo_ps, 
-       width = 5.62, 
-       height = 3.75, 
-       units = "in")
-ggsave(plot = Coverage_Grid, 
-       filename = "output/plots/Coverage_2Panel_Final_Fig6.png", 
-       width = 5.62, 
-       height = 3.75, 
-       units = "in",
-       dpi = 600)
+# # --- Save the Final Plot for Publication ---
+# ggsave(plot = Coverage_Grid,
+#        filename = "output/plots/Coverage_2Panel_Final_Fig6.eps",
+#        device = cairo_ps,
+#        width = 5.62,
+#        height = 3.75,
+#        units = "in")
+# ggsave(plot = Coverage_Grid,
+#        filename = "output/plots/Coverage_2Panel_Final_Fig6.png",
+#        width = 5.62,
+#        height = 3.75,
+#        units = "in",
+#        dpi = 600)
 
 
 # All q Plot | Diversity Accumulation Curve --------------------------------------------------------------
-# 1. Create the initial ggplot object
-p <- ggiNEXT(Gear_Out_Raw, type = 1, se = TRUE, facet.var = "Order.q", color.var = "Assemblage") +
+
+# 1. Extract and format data
+df_all_q <- fortify(Gear_Out_Raw, type = 1) %>%
+  mutate(Order.q = case_when(
+    Order.q == 0 ~ "Species Richness",
+    Order.q == 1 ~ "Shannon Diversity",
+    Order.q == 2 ~ "Simpson Diversity"
+  ),
+  Order.q = factor(Order.q, levels = c("Species Richness", "Shannon Diversity", "Simpson Diversity")),
+  # Force matching levels to ensure legend order (Performance Trend: All -> Combos -> Singles)
+  # Added a blank spacer " " so All Gears can sit in its own column in a 2-row layout
+  Assemblage = factor(Assemblage, levels = c(
+    "All Gears", "Cast Net & Centipede Net", "Cast Net & Seine", "Centipede Net & Seine",
+    " ", "Cast Net", "Centipede Net", "Seine"
+  )))
+
+# 2. Build mapping vectors based on factor levels
+all_q_names <- levels(df_all_q$Assemblage)
+all_q_colors <- c(GearColorsAll(), " " = "transparent")[all_q_names]
+all_q_shapes <- c(unlist(GearShapes), " " = NA)[all_q_names]
+all_q_lines  <- c(GearLines(), " " = "blank")[all_q_names]
+
+# 3. Build the plot
+All_q_Plot <- ggplot(df_all_q, aes(x = x, y = y, color = Assemblage, fill = Assemblage)) +
+  # Confidence Ribbon
+  # Using drastically lower alpha (0.08) to prevent muddying in the crowded diversity plot
+  geom_ribbon(aes(ymin = y.lwr, ymax = y.upr), alpha = 0.08, color = NA, show.legend = FALSE) +
+  
+  # Rarefaction Lines (Thick and Bold)
+  geom_line(data = subset(df_all_q, Method == "Rarefaction"), 
+            aes(linetype = Assemblage), linewidth = 1, alpha = 1) +
+  
+  # Extrapolation Lines (Thin and slightly faded)
+  geom_line(data = subset(df_all_q, Method == "Extrapolation"), 
+            aes(linetype = Assemblage), linewidth = 0.8, alpha = 0.75) +
+            
+  # Observed Points
+  geom_point(data = subset(df_all_q, Method == "Observed"), 
+             aes(shape = Assemblage), size = 3) +
+             
+  # Scales
+  scale_color_manual(values = all_q_colors, breaks = all_q_names, drop = FALSE) +
+  scale_fill_manual(values = all_q_colors, breaks = all_q_names, drop = FALSE) +
+  scale_shape_manual(values = all_q_shapes, breaks = all_q_names, drop = FALSE) +
+  scale_linetype_manual(values = all_q_lines, breaks = all_q_names, drop = FALSE) +
+  
+  # 4. Use Guides to Force Linetypes into the Legend
+  guides(
+    color = guide_legend(
+      nrow = 2,           # Two rows for a wide layout
+      byrow = TRUE,       # Left-to-right, then top-to-bottom
+      keywidth = unit(0.5, "in"),
+      override.aes = list(
+        linetype = all_q_lines,
+        shape = all_q_shapes,
+        fill = all_q_colors,
+        linewidth = c(0.9, 0.9, 0.9, 0.9, 0, 0.9, 0.9, 0.9), # Hide line for spacer
+        size = c(2.5, 2.5, 2.5, 2.5, 0, 2.5, 2.5, 2.5)       # Hide point for spacer
+      )
+    ),
+    linetype = "none",
+    shape = "none",
+    fill = "none"
+  ) +
+  # Labels and Formatting
   labs(x = "Sampling Units", y = "Effective Species") +
-  scale_shape_manual(values = GearShapes) +
-  scale_color_manual(values = GearColorsAll(), aesthetics = c("colour", "fill")) +
-  scale_x_continuous(expand = c(0.01, 0.01)) + # Remove padding
+  scale_x_continuous(expand = c(0.01, 0.01)) +
   scale_y_continuous(expand = c(0.01, 0.01)) +
-  theme_classic(base_family = "serif", base_size = 9) +
+  facet_wrap(~Order.q, scales = "free_y") +
   theme(
     panel.background = element_rect(fill = "transparent"),
     legend.background = element_rect(fill = "transparent"), 
     legend.title = element_blank(),
     legend.position = "bottom",
     legend.justification = "center",
-    strip.text = element_text(vjust = 0.5) # Vertically center facet labels
-  ) +
-  facet_wrap(vars(Order.q), scales="free_y", labeller = labeller(Order.q = c("0" = "Species Richness", "1" = "Shannon Diversity", "2" = "Simpson Diversity"))) +
-  guides(
-    linetype = "none",
-    fill = "none",
-    shape = "none",
-    color = guide_legend(override.aes = list(
-      shape = GearShapes,
-      size = 2,
-      stroke = 1,
-      linewidth = 0.4,
-      alpha = 1,
-      linetype = unlist(GearLineTypes) # Add linetypes back to the legend
-    ))
+    strip.text = element_text(vjust = 0.5),
+    legend.key.height = unit(0.15, "in"),
+    legend.key.width = unit(0.5, "in")
   )
-
-# 2. Apply the definitive fix to remove ribbon from legend
-for (i in seq_along(p$layers)) {
-  if (inherits(p$layers[[i]]$geom, "GeomRibbon")) {
-    p$layers[[i]]$show.legend <- FALSE
-  }
-}
-
-# 3. Build the modified plot object
-gb <- ggplot_build(p)
-
-gb$data[[1]] <- gb$data[[1]] %>%
-  mutate(size = 3)
-
-gb$data[[2]] <- gb$data[[2]] %>%
-  mutate(
-    linewidth = 0.75,
-    linetype = case_when(
-      group >= 8 ~ "15",
-      group == 1 ~ GearLineTypes[[1]],
-      group == 2 ~ GearLineTypes[[2]],
-      group == 3 ~ GearLineTypes[[3]],
-      group == 4 ~ GearLineTypes[[4]],
-      group == 5 ~ GearLineTypes[[5]],
-      group == 6 ~ GearLineTypes[[6]],
-      group == 7 ~ GearLineTypes[[7]]
-    )
-  )
-
-gb$plot$theme$legend.key.height <- unit(0.15, "in")
-gb$plot$theme$legend.key.width <- unit(0.5, "in")
-
-# Create the gtable
-All_q_Plot <- ggplot_gtable(gb)
 
 # Display the plot
 plot(All_q_Plot)
 
-# --- Save the Final Plot for Publication --- Figure 9
-ggsave(plot = All_q_Plot, 
-       filename = "output/plots/All_q_Plot_Final.eps", 
-       device = cairo_ps,
-       width = 5.62, 
-       height = 3.75, 
-       units = "in")
-ggsave(plot = All_q_Plot, 
-       filename = "output/plots/All_q_Plot_Final.png", 
-       width = 5.62, 
-       height = 3.75, 
-       units = "in",
-       dpi = 600)
-
-# ## Testing Type 3 Plot:
-# # All q Plot | Diversity Accumulation Curve --------------------------------------------------------------
-# # 1. Create the initial ggplot object
-# p <- ggiNEXT(Gear_Out_Raw, type = 3, se = TRUE, facet.var = "Order.q", color.var = "Assemblage") +
-#   labs(x = "Percent Coverage", y = "Effective Species") +
-#   scale_shape_manual(values = GearShapes) +
-#   scale_color_manual(values = GearColorsAll(), aesthetics = c("colour", "fill")) +
-#   scale_x_continuous(expand = c(0.01, 0.01), labels = scales::percent) + # Remove padding
-#   scale_y_continuous(expand = c(0.01, 0.01)) +
-#   theme_classic(base_family = "serif", base_size = 9) +
-#   theme(
-#     panel.background = element_rect(fill = "transparent"),
-#     legend.background = element_rect(fill = "transparent"), 
-#     legend.title = element_blank(),
-#     legend.position = "bottom",
-#     legend.justification = "center",
-#     strip.text = element_text(vjust = 0.5) # Vertically center facet labels
-#   ) +
-#   facet_wrap(vars(Order.q), scales="free_y", labeller = labeller(Order.q = c("0" = "Species Richness", "1" = "Shannon Diversity", "2" = "Simpson Diversity"))) +
-#   guides(
-#     linetype = "none",
-#     fill = "none",
-#     shape = "none",
-#     color = guide_legend(override.aes = list(
-#       shape = GearShapes,
-#       size = 2,
-#       stroke = 1,
-#       linewidth = 0.4,
-#       alpha = 1,
-#       linetype = unlist(GearLineTypes) # Add linetypes back to the legend
-#     ))
-#   )
-# 
-# # 2. Apply the definitive fix to remove ribbon from legend
-# for (i in seq_along(p$layers)) {
-#   if (inherits(p$layers[[i]]$geom, "GeomRibbon")) {
-#     p$layers[[i]]$show.legend <- FALSE
-#   }
-# }
-# 
-# # 3. Build the modified plot object
-# gb <- ggplot_build(p)
-# 
-# gb$data[[1]] <- gb$data[[1]] %>%
-#   mutate(size = 3)
-# 
-# gb$data[[2]] <- gb$data[[2]] %>%
-#   mutate(
-#     linewidth = 0.75,
-#     linetype = case_when(
-#       group >= 8 ~ "15",
-#       group == 1 ~ GearLineTypes[[1]],
-#       group == 2 ~ GearLineTypes[[2]],
-#       group == 3 ~ GearLineTypes[[3]],
-#       group == 4 ~ GearLineTypes[[4]],
-#       group == 5 ~ GearLineTypes[[5]],
-#       group == 6 ~ GearLineTypes[[6]],
-#       group == 7 ~ GearLineTypes[[7]]
-#     )
-#   )
-# 
-# gb$plot$theme$legend.key.height <- unit(0.15, "in")
-# gb$plot$theme$legend.key.width <- unit(0.5, "in")
-# 
-# # Create the gtable
-# Type3_Curve <- ggplot_gtable(gb)
-# 
-# # Display the plot
-# plot(Type3_Curve)
-# 
 # # --- Save the Final Plot for Publication --- Figure 9
-# ggsave(plot = All_q_Plot, 
-#        filename = "output/plots/Type3_Curve.eps", 
+# ggsave(plot = All_q_Plot,
+#        filename = "output/plots/All_q_Plot_Final.eps",
 #        device = cairo_ps,
-#        width = 6, 
-#        height = 4, 
+#        width = 5.62,
+#        height = 3.75,
 #        units = "in")
-# ggsave(plot = All_q_Plot, 
-#        filename = "output/plots/Type3_Curve.png", 
-#        width = 6, 
-#        height = 4, 
-#        units = "in")
+# ggsave(plot = All_q_Plot,
+#        filename = "output/plots/All_q_Plot_Final.png",
+#        width = 5.62,
+#        height = 3.75,
+#        units = "in",
+#        dpi = 600)
+
+
 
 # Skip to here if not re-running iNEXT analysis ---------------------------
 # Table 5 How many samples would be required to attain set sample coverage? (Reported based on nboot = 1000).
@@ -591,40 +531,40 @@ total_stats_final <- bind_rows(
   # Cast Net
   GearSpeciesGrid %>% select(`Cast Net`) %>% summarize("Total Catch (n)" = sum(`Cast Net`, na.rm = TRUE)) %>%
     mutate(Gear = "Cast Net", "Species Richness" = nrow(Matrix_Cast),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cast), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cast), groups = "none", index = "invsimpson")),
+           "Shannon Diversity" = exp(diversity(rowSums(Matrix_Cast), index = "shannon")),
+           "Simpson Diversity" = diversity(rowSums(Matrix_Cast), index = "invsimpson")),
   # Centipede Net
   GearSpeciesGrid %>% select(`Centipede Net`) %>% summarize("Total Catch (n)" = sum(`Centipede Net`, na.rm = TRUE)) %>%
     mutate(Gear = "Centipede Net", "Species Richness" = nrow(Matrix_Cent),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cent), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cent), groups = "none", index = "invsimpson")),
+           "Shannon Diversity" = exp(diversity(rowSums(Matrix_Cent), index = "shannon")),
+           "Simpson Diversity" = diversity(rowSums(Matrix_Cent), index = "invsimpson")),
   # Seine
   GearSpeciesGrid %>% select(Seine) %>% summarize("Total Catch (n)" = sum(Seine, na.rm = TRUE)) %>%
     mutate(Gear = "Seine", "Species Richness" = nrow(Matrix_Seine),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Seine), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Seine), groups = "none", index = "invsimpson")),
+           "Shannon Diversity" = exp(diversity(rowSums(Matrix_Seine), index = "shannon")),
+           "Simpson Diversity" = diversity(rowSums(Matrix_Seine), index = "invsimpson")),
   # Cast Net & Centipede Net
   GearSpeciesGrid %>% select(`Cast Net`, `Centipede Net`) %>% summarize("Total Catch (n)" = sum(., na.rm = TRUE)) %>%
     mutate(Gear = "Cast Net & Centipede Net", "Species Richness" = nrow(Matrix_Cast_Cent),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cast_Cent), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cast_Cent), groups = "none", index = "invsimpson")),
+           "Shannon Diversity" = exp(diversity(rowSums(Matrix_Cast_Cent), index = "shannon")),
+           "Simpson Diversity" = diversity(rowSums(Matrix_Cast_Cent), index = "invsimpson")),
   # Cast Net & Seine
   GearSpeciesGrid %>% select(`Cast Net`, Seine) %>% summarize("Total Catch (n)" = sum(., na.rm = TRUE)) %>%
     mutate(Gear = "Cast Net & Seine", "Species Richness" = nrow(Matrix_Cast_Seine),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cast_Seine), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cast_Seine), groups = "none", index = "invsimpson")),
+           "Shannon Diversity" = exp(diversity(rowSums(Matrix_Cast_Seine), index = "shannon")),
+           "Simpson Diversity" = diversity(rowSums(Matrix_Cast_Seine), index = "invsimpson")),
   # Centipede Net & Seine
   GearSpeciesGrid %>% select(`Centipede Net`, Seine) %>% summarize("Total Catch (n)" = sum(., na.rm = TRUE)) %>%
     mutate(Gear = "Centipede Net & Seine", "Species Richness" = nrow(Matrix_Cent_Seine),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cent_Seine), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cent_Seine), groups = "none", index = "invsimpson")),
+           "Shannon Diversity" = exp(diversity(rowSums(Matrix_Cent_Seine), index = "shannon")),
+           "Simpson Diversity" = diversity(rowSums(Matrix_Cent_Seine), index = "invsimpson")),
   # All Gears (using the true study-wide objects)
   tibble(
     Gear = "All Gears",
     "Total Catch (n)" = sum(GearSpeciesGrid[,c("Cast Net", "Centipede Net", "Seine")], na.rm = TRUE),
     "Species Richness" = length(unique(na.omit(MergedData$Species))),
-    "Shannon Diversity" = exp(diversity(t(StudyWide_Incidence_Matrix), groups = "none", index = "shannon")),
-    "Simpson Diversity" = diversity(t(StudyWide_Incidence_Matrix), groups = "none", index = "invsimpson")
+    "Shannon Diversity" = exp(diversity(rowSums(StudyWide_Incidence_Matrix), index = "shannon")),
+    "Simpson Diversity" = diversity(rowSums(StudyWide_Incidence_Matrix), index = "invsimpson")
   )
 )
 
@@ -653,38 +593,6 @@ Tables$`Gear Study Summary` <- full_join(
   mutate("Effort Unit" = c("Throws", "Net Group Hours", "Hauls", NA, NA, NA, NA), .after = "Mean Effort") %>% 
   arrange(match(Gear, c("Cast Net", "Centipede Net", "Seine", "Cast Net & Centipede Net", "Cast Net & Seine", "Centipede Net & Seine", "All Gears"))) %>%
   relocate(Gear, `Total Samples`, `Total Catch (n)`, `Species Richness`, `Shannon Diversity`, `Simpson Diversity`, `Mean Catch (n)`, `Mean Richness`, `Mean Shannon Diversity`, `Mean Simpson Diversity`, `Mean Biomass (g)`, `Mean CPUE`)
-
-
-# Boxplot of lengths by gear
-ggplot(MergedData %>% filter(!is.na(StandardLength_mm)), aes(x = Gear, y = StandardLength_mm, fill = Gear)) +
-  stat_boxplot(geom = "errorbar", width = 0.2) +
-  geom_boxplot(outlier.shape = 16, outlier.size = 2, alpha = 0.75) +
-  geom_text(
-    data = MergedData %>% group_by(Gear) %>% summarize(StandardLength_mm = mean(StandardLength_mm, na.rm = TRUE)),
-    aes(label = paste("Mean =", round(StandardLength_mm, 1)), y = StandardLength_mm, family = "serif"),
-    vjust = c(1.2, 0.1, 0.2), color = "black"
-  ) +
-  scale_fill_manual(values = GearColors()[2:4]) +
-  labs(y = "Standard Length (mm)") +
-  theme_classic(base_size = 9, base_family = "serif") +
-  theme(axis.title.x = element_blank(), legend.position = "none")
-# ggsave("output/plots/Length_Gear_Boxplot.png", width = 6, height = 6)
-
-
-# Boxplot of weights by gear **Includes 'AverageWeight_g' for batch-measured catch for samples with >30 of one species. That only occurred in Seines.
-ggplot(MergedData %>% mutate(Weight_g = if_else(is.na(Weight_g), AverageWeight_g, Weight_g)) %>% select(Gear, Weight_g) %>% na.omit(), aes(x = Gear, y = Weight_g, fill = Gear)) +
-  stat_boxplot(geom = "errorbar", width = 0.2) +
-  geom_boxplot(outlier.shape = 16, outlier.size = 2) +
-  geom_text(
-    data = MergedData %>% mutate(Weight_g = if_else(is.na(Weight_g), AverageWeight_g, Weight_g)) %>% select(Gear, Weight_g) %>% na.omit() %>% group_by(Gear) %>% summarize(Weight_g = mean(Weight_g, na.rm = TRUE)),
-    aes(label = paste("Mean =", round(Weight_g, 1)), y = Weight_g, family = "serif"),
-    vjust = c(3.2, 3.5, 2), color = "black"
-  ) +
-  scale_fill_manual(values = GearColors()[2:4]) +
-  labs(y = "Weight (g)") +
-  theme_classic(base_size = 9, base_family = "serif") +
-  theme(axis.title.x = element_blank(), legend.position = "none")
-# ggsave("output/plots/Weight_Gear_Boxplot.png", width = 6, height = 6)
 
 
 # Create two-panel figure of violin plot & scatterplot (length x weight by gear)
@@ -728,7 +636,6 @@ Violin_Plot_SL <- ggplot(data = plot_data, aes(x = Gear, y = StandardLength_mm, 
     size = 3, # Use a standard relative size
     y = -30     # Position the text below the plot
   ) +
-  theme_classic(base_size = 9, base_family = "serif") +
   theme(
     legend.position = "none", 
     axis.text = element_text(size = 9, color = "black")
@@ -737,33 +644,20 @@ Violin_Plot_SL <- ggplot(data = plot_data, aes(x = Gear, y = StandardLength_mm, 
 # Display the plot
 plot(Violin_Plot_SL)
 
-# --- 3. Save the plot in the correct format for publication ---
-ggsave(plot = Violin_Plot_SL, 
-       filename = "output/plots/Length_Gear_Violin_SL.eps", 
-       device = cairo_ps,
-       width = 2.75, 
-       height = 3.66, 
-       units = "in")
-ggsave(plot = Violin_Plot_SL, 
-       filename = "output/plots/Length_Gear_Violin_SL.png", 
-       width = 2.75, 
-       height = 3.66, 
-       units = "in",
-       dpi = 600)
+# # --- 3. Save the plot in the correct format for publication ---
+# ggsave(plot = Violin_Plot_SL, 
+#        filename = "output/plots/Length_Gear_Violin_SL.eps", 
+#        device = cairo_ps,
+#        width = 2.75, 
+#        height = 3.66, 
+#        units = "in")
+# ggsave(plot = Violin_Plot_SL, 
+#        filename = "output/plots/Length_Gear_Violin_SL.png", 
+#        width = 2.75, 
+#        height = 3.66, 
+#        units = "in",
+#        dpi = 600)
 
-# # Scatterplot length x weight by gear
-#  # ScatterPlot_LW <-
-#    ggplot(MergedData %>% filter(!is.na(Weight_g)), aes(x = StandardLength_mm, y = Weight_g, color = Gear)) +
-#     scale_color_manual(values = GearColors()) +
-#    scale_y_continuous(limits = c(-20, NA)) +
-#     geom_point(size = 2, alpha = 0.75) +
-#     labs(x = "Standard Length (mm)", y = "Weight (g)") +
-#     theme_classic(base_size = 9, base_family = "serif") +
-#     theme(legend.position = "none") #Customize axis text to match violin plot,
-#   # nrow = 1, labels = Letters(), label_x = 0, align = "hv", label_fontface = "plain", label_size = 12, label_fontfamily = "serif")
-# 
-# # ggsave("output/plots/LengthWeight_2Panel.png", width = 6, height = 4)
-# # ggsave("output/plots/LengthWeight_Scatter.png", width = 6, height = 4)
 
 # Catch by Site
 Tables$`Site Catch` <- MergedData %>%
@@ -787,90 +681,6 @@ Tables$`Site CPUE` <- SampleData %>%
       pivot_wider(names_from = Gear, values_from = CPUE) %>%
       mutate(Site = "All Sites", "All Gears" = rowMeans(across(where(is.numeric)), na.rm = TRUE))
   )
-
-
-# Summary data by gear
-
-# --- 1. Create a table of TOTAL stats (Catch, Richness, Diversity) ---
-# This table calculates the TRUE study-wide totals for all 7 combinations
-# by pooling all valid samples, regardless of site-visit matching.
-
-# --- First, create all the correct (un-paired) incidence matrices for this table ---
-Matrix_Cast <- dcast(MergedData %>% filter(Gear == "Cast Net" & Effort != 0), Species ~ SampleID, value.var = "Count", fun.aggregate = length, fill = 0) %>% mutate(across(where(is.numeric), ~ replace(., . != 0, 1))) %>% filter(!is.na(Species)) %>% column_to_rownames(var = "Species")
-Matrix_Cent <- dcast(MergedData %>% filter(Gear == "Centipede Net" & Effort != 0 & SampleID != 'Tiv2_Cent'), Species ~ SampleID, value.var = "Count", fun.aggregate = length, fill = 0) %>% mutate(across(where(is.numeric), ~ replace(., . != 0, 1))) %>% filter(!is.na(Species)) %>% column_to_rownames(var = "Species")
-Matrix_Seine <- dcast(MergedData %>% filter(Gear == "Seine" & Effort != 0), Species ~ SampleID, value.var = "Count", fun.aggregate = length, fill = 0) %>% mutate(across(where(is.numeric), ~ replace(., . != 0, 1))) %>% filter(!is.na(Species)) %>% column_to_rownames(var = "Species")
-Matrix_Cast_Cent <- dcast(MergedData %>% filter((Gear == "Cast Net" | Gear == "Centipede Net") & Effort != 0 & SampleID != 'Tiv2_Cent'), Species ~ SampleID, value.var = "Count", fun.aggregate = length, fill = 0) %>% mutate(across(where(is.numeric), ~ replace(., . != 0, 1))) %>% filter(!is.na(Species)) %>% column_to_rownames(var = "Species")
-Matrix_Cast_Seine <- dcast(MergedData %>% filter((Gear == "Cast Net" | Gear == "Seine") & Effort != 0), Species ~ SampleID, value.var = "Count", fun.aggregate = length, fill = 0) %>% mutate(across(where(is.numeric), ~ replace(., . != 0, 1))) %>% filter(!is.na(Species)) %>% column_to_rownames(var = "Species")
-Matrix_Cent_Seine <- dcast(MergedData %>% filter((Gear == "Centipede Net" | Gear == "Seine") & Effort != 0 & SampleID != 'Tiv2_Cent'), Species ~ SampleID, value.var = "Count", fun.aggregate = length, fill = 0) %>% mutate(across(where(is.numeric), ~ replace(., . != 0, 1))) %>% filter(!is.na(Species)) %>% column_to_rownames(var = "Species")
-# Matrix_All_Gears is your existing 'StudyWide_Incidence_Matrix' (which is correct)
-
-# --- Now, build the 7-row table of total stats ---
-total_stats_final <- bind_rows(
-  # Cast Net
-  GearSpeciesGrid %>% select(`Cast Net`) %>% summarize("Total Catch (n)" = sum(`Cast Net`, na.rm = TRUE)) %>%
-    mutate(Gear = "Cast Net", "Species Richness" = nrow(Matrix_Cast),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cast), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cast), groups = "none", index = "invsimpson")),
-  # Centipede Net
-  GearSpeciesGrid %>% select(`Centipede Net`) %>% summarize("Total Catch (n)" = sum(`Centipede Net`, na.rm = TRUE)) %>%
-    mutate(Gear = "Centipede Net", "Species Richness" = nrow(Matrix_Cent),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cent), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cent), groups = "none", index = "invsimpson")),
-  # Seine
-  GearSpeciesGrid %>% select(Seine) %>% summarize("Total Catch (n)" = sum(Seine, na.rm = TRUE)) %>%
-    mutate(Gear = "Seine", "Species Richness" = nrow(Matrix_Seine),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Seine), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Seine), groups = "none", index = "invsimpson")),
-  # Cast Net & Centipede Net
-  GearSpeciesGrid %>% select(`Cast Net`, `Centipede Net`) %>% summarize("Total Catch (n)" = sum(., na.rm = TRUE)) %>%
-    mutate(Gear = "Cast Net & Centipede Net", "Species Richness" = nrow(Matrix_Cast_Cent),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cast_Cent), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cast_Cent), groups = "none", index = "invsimpson")),
-  # Cast Net & Seine
-  GearSpeciesGrid %>% select(`Cast Net`, Seine) %>% summarize("Total Catch (n)" = sum(., na.rm = TRUE)) %>%
-    mutate(Gear = "Cast Net & Seine", "Species Richness" = nrow(Matrix_Cast_Seine),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cast_Seine), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cast_Seine), groups = "none", index = "invsimpson")),
-  # Centipede Net & Seine
-  GearSpeciesGrid %>% select(`Centipede Net`, Seine) %>% summarize("Total Catch (n)" = sum(., na.rm = TRUE)) %>%
-    mutate(Gear = "Centipede Net & Seine", "Species Richness" = nrow(Matrix_Cent_Seine),
-           "Shannon Diversity" = exp(diversity(t(Matrix_Cent_Seine), groups = "none", index = "shannon")),
-           "Simpson Diversity" = diversity(t(Matrix_Cent_Seine), groups = "none", index = "invsimpson")),
-  # All Gears (using the true study-wide objects)
-  tibble(
-    Gear = "All Gears",
-    "Total Catch (n)" = sum(GearSpeciesGrid[,c("Cast Net", "Centipede Net", "Seine")], na.rm = TRUE),
-    "Species Richness" = length(unique(na.omit(MergedData$Species))),
-    "Shannon Diversity" = exp(diversity(t(StudyWide_Incidence_Matrix), groups = "none", index = "shannon")),
-    "Simpson Diversity" = diversity(t(StudyWide_Incidence_Matrix), groups = "none", index = "invsimpson")
-  )
-)
-
-# --- 2. Create the final table by merging MEAN and TOTAL stats ---
-Tables$`Gear Study Summary` <- merge(
-  bind_rows(
-    SampleData %>%
-      summarize(
-        "Total Samples" = length(Richness), "Mean Effort" = mean(Effort),
-        "Mean Catch (n)" = mean(Abundance, na.rm = T), "Mean CPUE" = mean(CPUE, na.rm = T),
-        "Mean Biomass (g)" = mean(Biomass, na.rm = T), "Mean Richness" = mean(Richness, na.rm = T),
-        "Mean Shannon Diversity" = mean(Shannon, na.rm = T), "Mean Simpson Diversity" = mean(Simpson, na.rm = T),
-        .by = Gear
-      ),
-    SampleData %>%
-      summarize(
-        Gear = "All Gears", "Total Samples" = length(Richness), "Mean Effort" = NA,
-        "Mean Catch (n)" = mean(Abundance, na.rm = T), "Mean CPUE" = NA,
-        "Mean Biomass (g)" = mean(Biomass, na.rm = T), "Mean Richness" = mean(Richness, na.rm = T),
-        "Mean Shannon Diversity" = mean(Shannon, na.rm = T), "Mean Simpson Diversity" = mean(Simpson, na.rm = T)
-      )
-  ),
-  total_stats_final,
-  by = "Gear", all = TRUE, sort = FALSE
-) %>%
-  mutate("Effort Unit" = c("Throws", "Net Group Hours", "Hauls", NA, NA, NA, NA), .after = "Mean Effort") %>% 
-  arrange(match(Gear, c("Cast Net", "Centipede Net", "Seine", "Cast Net & Centipede Net", "Cast Net & Seine", "Centipede Net & Seine", "All Gears"))) %>%
-  relocate(Gear, `Total Samples`, `Total Catch (n)`, `Species Richness`, `Shannon Diversity`, `Simpson Diversity`, `Mean Catch (n)`, `Mean Richness`, `Mean Shannon Diversity`, `Mean Simpson Diversity`, `Mean Biomass (g)`, `Mean CPUE`)
 
 
 # Dominant species with abundances:
@@ -934,20 +744,21 @@ Tables$`Gear Exclusives` <- bind_cols(
 # Venn Diagram
 venn_fit <- euler(GearSpeciesCheck[, c(2, 4, 3)] == "✓")
 Gear_Venn <- plot(venn_fit,
-                  labels = list(col = "black", fontfamily = "serif SemiBold", fontsize = 12),
-                  quantities = list(col = "black", fontfamily = "serif", fontsize = 12),
+                  labels = list(labels = c("Cast Net", "Seine", "Centipede Net"), 
+                                col = "black", fontfamily = "serif", fontface = "semibold", fontsize = 9),
+                  quantities = list(col = "black", fontfamily = "serif", fontsize = 9),
                   edges = list(col = "black", alpha = 1),
-                  fills = list(fill = GearColors()[c(2, 4, 3)], alpha = 0.9),
-                  lty = c(2, 3, 1),
-                  lwd = 3
+                  fills = list(fill = GearColors()[c(2, 4, 3)], alpha = 0.7),
+                  lty = c("22", "1343", "73"), # Cast Net, Seine, Centipede Net
+                  lwd = 1.5
                   )
 
 Gear_Venn
 
-# Saving as vector graphics
-# cairo_ps(filename = "output/plots/Venn_Diagram_Final.eps", 
-#          width = 5, 
-#          height = 5, 
+# # Saving as vector graphics
+# cairo_ps(filename = "output/plots/Venn_Diagram_Final.eps",
+#          width = 5,
+#          height = 5,
 #          family = "serif")
 # 
 # plot(Gear_Venn)
@@ -965,16 +776,17 @@ wb <- wb_workbook()
 for (i in 1:length(Tables)) {
   sheet_name <- names(Tables)[i]
 
-  wb <- wb_add_worksheet(wb, sheet = sheet_name) %>%
-    wb_add_data_table(wb,
+  wb <- wb %>%
+    wb_add_worksheet(sheet = sheet_name) %>%
+    wb_add_data_table(
       sheet = sheet_name, x = Tables[[i]],
       table_style = "TableStyleLight1",
       table_name = gsub(" ", "_", sheet_name),
       dims = wb_dims(from_col = 1),
       na.strings = ""
     ) %>%
-    wb_set_col_widths(cols = 1:ncol(Tables[[1]]), widths = "auto") %>%
-    wb_add_cell_style(dims = "A1:K100", horizontal = "center", vertical = "center", num_fmt_id = 4)
+    wb_set_col_widths(sheet = sheet_name, cols = 1:ncol(Tables[[i]]), widths = "auto") %>%
+    wb_add_cell_style(sheet = sheet_name, dims = wb_dims(x = Tables[[i]]), horizontal = "center", vertical = "center", num_fmt_id = 4)
 }
 
 # Save the workbook (And add specific formatting tweaks for some tables)
@@ -982,3 +794,5 @@ wb <- wb %>%
   wb_add_font("Species List", dims = "A2:A100", italic = TRUE) %>%
   wb_add_cell_style("Species List", dims = "C2:E100", num_fmt_id = 1) %>%
   wb_save(file = "output/tables/Tables.xlsx", overwrite = TRUE)
+
+ 
