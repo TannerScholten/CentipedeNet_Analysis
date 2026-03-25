@@ -265,7 +265,7 @@ p_abund <- ggplot(geardat, aes(x = as.numeric(as.factor(Gear)), y = Abundance)) 
             # size = 4, 
             position = position_nudge(x = 0.3), hjust = 0) +
   scale_y_continuous(trans = scales::pseudo_log_trans(base = 10), breaks = c(0, 2, 10, 50, 150, 500), labels = label_number(accuracy = 1)) +
-  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear)))) +
+  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear))), expand = expansion(mult = c(0.1, 0.2))) +
   scale_fill_manual(values = GearColors()) +
   labs(y = "Abundance (log scale)", x = NULL, title = "Abundance", subtitle = "") +
   theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
@@ -280,7 +280,7 @@ p_rich <- ggplot(geardat, aes(x = as.numeric(as.factor(Gear)), y = Richness)) +
             # size = 4, 
             position = position_nudge(x = 0.3), hjust = 0) +
   scale_y_continuous(breaks = c(0,3,6,9,12)) +
-  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear)))) +
+  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear))), expand = expansion(mult = c(0.1, 0.2))) +
   scale_fill_manual(values = GearColors()) +
   labs(y = "Species Richness", x = NULL, title ="Species Richness", subtitle = "") +
   theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
@@ -291,10 +291,10 @@ p_div <- ggplot(geardat, aes(x = as.numeric(as.factor(Gear)), y = Shannon)) +
   geom_boxplot(aes(group = Gear, fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
   geom_point(data = cld_div, aes(x = as.numeric(as.factor(Gear)), y = response), size = 1, color = "red", position = position_nudge(x = 0.2)) +
   geom_errorbar(data = cld_div, aes(x = as.numeric(as.factor(Gear)), y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_text(data = cld_div, aes(x = as.numeric(as.factor(Gear)), y = response, label = str_trim(.group)), 
+  geom_text(data = cld_div, aes(x = as.numeric(as.factor(Gear)), y = asymp.UCL, label = str_trim(.group)), 
             # size = 4, 
             position = position_nudge(x = 0.3), hjust = 0) +
-  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear)))) +
+  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear))), expand = expansion(mult = c(0.1, 0.2))) +
   scale_fill_manual(values = GearColors()) +
   labs(y = "Shannon Diversity", x = NULL, title = "Shannon Diversity", subtitle = "") +
   theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
@@ -305,11 +305,11 @@ p_sim <- ggplot(geardat, aes(x = as.numeric(as.factor(Gear)), y = Simpson)) +
   geom_boxplot(aes(group = Gear, fill = Gear), alpha = 0.75, width = 0.1, outlier.shape = NA) +
   geom_point(data = cld_sim, aes(x = as.numeric(as.factor(Gear)), y = response), size = 1, color = "red", position = position_nudge(x = 0.2)) +
   geom_errorbar(data = cld_sim, aes(x = as.numeric(as.factor(Gear)), y = NULL, ymin = asymp.LCL, ymax = asymp.UCL), width = 0.1, color = "red", position = position_nudge(x = 0.2)) +
-  geom_text(data = cld_sim, aes(x = as.numeric(as.factor(Gear)), y = response, label = str_trim(.group)), 
+  geom_text(data = cld_sim, aes(x = as.numeric(as.factor(Gear)), y = asymp.UCL, label = str_trim(.group)), 
             # size = 4, 
             position = position_nudge(x = 0.3), hjust = 0) +
   scale_y_continuous(breaks = c(1,3,5,7)) +
-  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear)))) +
+  scale_x_continuous(breaks = 1:3, labels = sort(unique(as.character(geardat$Gear))), expand = expansion(mult = c(0.1, 0.2))) +
   scale_fill_manual(values = GearColors()) +
   labs(y = "Simpson Diversity", x = NULL, title = "Simpson Diversity", subtitle = "") +
   theme(legend.position = "none", plot.title.position = "plot", plot.title = element_text(vjust = -1))
@@ -324,7 +324,7 @@ final_tukey_plot <- plot_grid(
 
 final_tukey_plot
 # ggsave(plot = final_tukey_plot, "output/plots/GearTukeyGrid.eps", device = cairo_ps,  width = 5.62, height = 5.62, units = "in")
-# ggsave(plot = final_tukey_plot, "output/plots/GearTukeyGrid.png",  width = 5.62, height = 5.62, units = "in", dpi = 300)
+ggsave(plot = final_tukey_plot, "output/plots/GearTukeyGrid.png",  width = 5.62, height = 5.62, units = "in", dpi = 300)
 
 
 # Model Selection------------------------------------------------
