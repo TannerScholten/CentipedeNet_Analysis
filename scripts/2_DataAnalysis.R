@@ -14,7 +14,7 @@ library(parallel)
 
 # Load pre-wrangled dataframes and remove what I don't need right now
 load("data/WrangledData.RData")
-# load("output/models/Rarefaction.RData")
+load("output/models/Rarefaction.RData")
 
 # Source the global ggplot2 theme and aesthetic scales
 source("scripts/0_PlotTheme.R")
@@ -645,16 +645,16 @@ Violin_Plot_SL <- ggplot(data = plot_data, aes(x = Gear, y = StandardLength_mm, 
 plot(Violin_Plot_SL)
 
 # # --- 3. Save the plot in the correct format for publication ---
-# ggsave(plot = Violin_Plot_SL, 
-#        filename = "output/plots/Length_Gear_Violin_SL.eps", 
+# ggsave(plot = Violin_Plot_SL,
+#        filename = "output/plots/Length_Gear_Violin_SL.eps",
 #        device = cairo_ps,
-#        width = 2.75, 
-#        height = 3.66, 
+#        width = 2.75,
+#        height = 3.66,
 #        units = "in")
-# ggsave(plot = Violin_Plot_SL, 
-#        filename = "output/plots/Length_Gear_Violin_SL.png", 
-#        width = 2.75, 
-#        height = 3.66, 
+# ggsave(plot = Violin_Plot_SL,
+#        filename = "output/plots/Length_Gear_Violin_SL.png",
+#        width = 2.75,
+#        height = 3.66,
 #        units = "in",
 #        dpi = 600)
 
@@ -764,7 +764,8 @@ Gear_Venn
 # plot(Gear_Venn)
 # 
 # dev.off()
-
+# ggsave(plot = Gear_Venn, "output/plots/Venn_Diagram_Final.png", 
+#        width = 5, height = 5, units = "in", dpi = 600)
 
 # Create Excel file with a sheet for each table in Tables-------------
 # Set minimum column width to avoid very narrow cells
