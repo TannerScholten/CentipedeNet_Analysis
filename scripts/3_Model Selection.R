@@ -683,7 +683,7 @@ check_additive_vif(geardat, tweedie(link="log"), "Simpson")
 #   DivInt   = DivIntAvg,
 #   SimInt   = SimIntTop
 # )
-# save(geardat, ScaleData, AbundIntFit, RichIntFit, DivIntFit, SimIntFit, AbundIntTest, RichIntTest, DivIntTest, SimIntTest, SimIntTestAll, TopAvgCoefs, AbundIntTable, RichIntTable, DivIntTable, SimIntTable, AvgMods, file = "output/models/DredgeListGLMM.RData")
+# save(geardat, ScaleData, ScaleDataEffort, AbundIntFit, RichIntFit, DivIntFit, SimIntFit, AbundIntTest, RichIntTest, DivIntTest, SimIntTest, SimIntTestAll, TopAvgCoefs, AbundIntTable, RichIntTable, DivIntTable, SimIntTable, AvgMods, file = "output/models/DredgeListGLMM.RData")
 
 # Marginal Effects ----------------------------------- 
 # Dummy plot to extract shared legends

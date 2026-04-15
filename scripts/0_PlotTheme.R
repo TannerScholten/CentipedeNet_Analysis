@@ -93,3 +93,13 @@ gear_scales <- list(
 plot_theme <- 
   theme(legend.position = "none", 
         plot.margin = margin(t = 10, r = 10, b = 10, l = 10, unit = "pt"))
+
+# A high-visibility theme for PowerPoint presentations (24pt font)
+presentation_theme <- 
+  theme_classic(base_family = "Aptos", base_size = 18) +
+  theme(legend.position = "none", 
+        plot.margin = margin(t = 15, r = 15, b = 15, l = 15, unit = "pt"),
+        plot.title = element_text(margin = margin(b = 10), hjust = 0.5, face = "bold"),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10)),
+        text = element_text(colour = "black"))

@@ -8,7 +8,6 @@ library(vegan)
 library(cowplot)
 library(eulerr)
 library(tidyverse)
-# library(devtools)
 library(openxlsx2)
 library(parallel)
 
