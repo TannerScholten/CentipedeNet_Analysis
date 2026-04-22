@@ -1,0 +1,21 @@
+ Family: poisson  ( log )
+Formula:          Richness ~ Gear + (1 | Site)
+Data: geardat
+
+      AIC       BIC    logLik -2*log(L)  df.resid 
+    385.4     395.1    -188.7     377.4        80 
+
+Random effects:
+
+Conditional model:
+ Groups Name        Variance Std.Dev.
+ Site   (Intercept) 0.02445  0.1564  
+Number of obs: 84, groups:  Site, 6
+
+Conditional model:
+                  Estimate Std. Error z value Pr(>|z|)    
+(Intercept)         1.2934     0.1162  11.128  < 2e-16 ***
+GearCentipede Net   0.4592     0.1243   3.694 0.000221 ***
+GearSeine           0.3816     0.1271   3.002 0.002684 ** 
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1

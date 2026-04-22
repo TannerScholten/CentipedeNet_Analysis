@@ -1,3 +1,4 @@
+source('scripts/00_AI_Export_Utils.R')
 # 3_Model_Figures_PowerPoint.R
 # Streamlined script for generating Marginal Effects plots for PowerPoint.
 # Loads pre-run models from output/models/DredgeListGLMM.RData.

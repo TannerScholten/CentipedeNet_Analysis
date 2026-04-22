@@ -1,3 +1,4 @@
+source('scripts/00_AI_Export_Utils.R')
 
 #**Verified to be working on 3/6/2026, with changes made to utilize RProject and containerization to via GitHub**
 

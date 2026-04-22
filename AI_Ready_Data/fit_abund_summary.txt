@@ -1,0 +1,23 @@
+ Family: nbinom2  ( log )
+Formula:          Abundance ~ Gear + (1 | Site)
+Data: geardat
+
+      AIC       BIC    logLik -2*log(L)  df.resid 
+    754.2     766.3    -372.1     744.2        79 
+
+Random effects:
+
+Conditional model:
+ Groups Name        Variance Std.Dev.
+ Site   (Intercept) 0.1321   0.3635  
+Number of obs: 84, groups:  Site, 6
+
+Dispersion parameter for nbinom2 family (): 1.18 
+
+Conditional model:
+                  Estimate Std. Error z value Pr(>|z|)    
+(Intercept)         2.4243     0.2371  10.227  < 2e-16 ***
+GearCentipede Net   0.7238     0.2641   2.741  0.00613 ** 
+GearSeine           2.1456     0.2745   7.816 5.46e-15 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1

@@ -1,3 +1,4 @@
+source('scripts/00_AI_Export_Utils.R')
 ##**Confirmed to be functional 3/6/2026. Made minor adjustments to make more sharable on GitHub**
 # This script does not modify any pre-existing dataframes from WrangledData.RData and is not necessary to run prior to "3_Model Selection.R"
 # It primarily synthesizes, summarizes, and visualizes data created in "1_DataWrangling.R", with the exception of the iNEXT analysis that takes place in this script.
@@ -475,6 +476,10 @@ Tables$`iNEXT Coverage` <-
   select(1:2, 4:5) %>%
   rename("Number of Samples" = T, "Observed Richness" = S.obs, "Estimated Sample Coverage" = SC)
 
+# Export iNEXT Asymptotic Estimates and Data Info to AI_Ready_Data
+write.csv(Gear_Out_Raw$AsyEst, "output/AI_Ready_Data/iNEXT_AsyEst.csv", row.names = FALSE)
+write.csv(Gear_Out_Raw$DataInfo, "output/AI_Ready_Data/iNEXT_DataInfo.csv", row.names = FALSE)
+
 # Table 4 Hill Number Estimates:
 Tables$`iNEXT Estimates` <-
   Gear_Out_Raw$AsyEst %>%
@@ -782,6 +787,10 @@ wb <- wb_workbook()
 # Loop through each dataframe in Tables
 for (i in 1:length(Tables)) {
   sheet_name <- names(Tables)[i]
+  
+  # Export table to AI_Ready_Data as CSV
+  safe_sheet_name <- gsub(" ", "_", sheet_name)
+  write.csv(Tables[[i]], paste0("output/AI_Ready_Data/Table_", safe_sheet_name, ".csv"), row.names = FALSE)
 
   wb <- wb %>%
     wb_add_worksheet(sheet = sheet_name) %>%

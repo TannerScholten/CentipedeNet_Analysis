@@ -1,0 +1,43 @@
+ Family: tweedie  ( log )
+Formula:          
+Simpson ~ Gear * logEffort + Gear * (Occlusion + SecchiDepth +  
+    DaylightPercent) + Steepness + MudDominant + Season + Temperature +  
+    (1 | Site)
+Data: geardat
+
+      AIC       BIC    logLik -2*log(L)  df.resid 
+      286       342      -120       240        61 
+
+Random effects:
+
+Conditional model:
+ Groups Name        Variance  Std.Dev. 
+ Site   (Intercept) 1.038e-10 1.019e-05
+Number of obs: 84, groups:  Site, 6
+
+Dispersion parameter for tweedie family (): 0.363 
+
+Conditional model:
+                                   Estimate Std. Error z value Pr(>|z|)    
+(Intercept)                        1.052404   0.210349   5.003 5.64e-07 ***
+GearCentipede Net                  0.284431   0.101825   2.793  0.00522 ** 
+GearSeine                         -0.007795   0.110108  -0.071  0.94356    
+logEffort                         -0.097600   0.070451  -1.385  0.16594    
+Occlusion                         -0.107604   0.098257  -1.095  0.27346    
+SecchiDepth                       -0.173127   0.123468  -1.402  0.16086    
+DaylightPercent                   -0.134641   0.078770  -1.709  0.08740 .  
+SteepnessMedium                   -0.012717   0.170724  -0.074  0.94062    
+SteepnessHigh                     -0.136892   0.171723  -0.797  0.42536    
+MudDominantTrue                   -0.077667   0.183319  -0.424  0.67181    
+SeasonRainy                       -0.205212   0.102033  -2.011  0.04430 *  
+Temperature                        0.067752   0.064549   1.050  0.29389    
+GearCentipede Net:logEffort        0.225589   0.117392   1.922  0.05465 .  
+GearSeine:logEffort                0.350948   0.115648   3.035  0.00241 ** 
+GearCentipede Net:Occlusion        0.025662   0.110421   0.232  0.81623    
+GearSeine:Occlusion               -0.078233   0.111734  -0.700  0.48382    
+GearCentipede Net:SecchiDepth      0.143207   0.148960   0.961  0.33636    
+GearSeine:SecchiDepth             -0.090527   0.167592  -0.540  0.58908    
+GearCentipede Net:DaylightPercent  0.130783   0.103376   1.265  0.20582    
+GearSeine:DaylightPercent         -0.012344   0.109278  -0.113  0.91006    
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1

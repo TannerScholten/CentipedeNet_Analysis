@@ -1,0 +1,43 @@
+ Family: nbinom2  ( log )
+Formula:          
+Abundance ~ Gear * logEffort + Gear * (Occlusion + SecchiDepth +  
+    DaylightPercent) + Steepness + MudDominant + Season + Temperature +  
+    (1 | Site)
+Data: geardat
+
+      AIC       BIC    logLik -2*log(L)  df.resid 
+    747.5     801.0    -351.8     703.5        62 
+
+Random effects:
+
+Conditional model:
+ Groups Name        Variance  Std.Dev. 
+ Site   (Intercept) 4.874e-10 2.208e-05
+Number of obs: 84, groups:  Site, 6
+
+Dispersion parameter for nbinom2 family ():  1.7 
+
+Conditional model:
+                                  Estimate Std. Error z value Pr(>|z|)    
+(Intercept)                        2.43260    0.50424   4.824 1.41e-06 ***
+GearCentipede Net                  0.73696    0.22713   3.245 0.001176 ** 
+GearSeine                          1.86128    0.22903   8.127 4.41e-16 ***
+logEffort                          0.16931    0.17681   0.958 0.338268    
+Occlusion                         -0.08987    0.22752  -0.395 0.692830    
+SecchiDepth                        0.05622    0.18957   0.297 0.766802    
+DaylightPercent                   -0.25489    0.16774  -1.520 0.128624    
+SteepnessMedium                    0.02645    0.38856   0.068 0.945731    
+SteepnessHigh                     -0.46722    0.37002  -1.263 0.206698    
+MudDominantTrue                    0.40578    0.44238   0.917 0.359009    
+SeasonRainy                       -0.36781    0.22530  -1.633 0.102561    
+Temperature                       -0.08213    0.14572  -0.564 0.572987    
+GearCentipede Net:logEffort        0.15461    0.27667   0.559 0.576278    
+GearSeine:logEffort               -0.70616    0.27928  -2.528 0.011455 *  
+GearCentipede Net:Occlusion        0.28767    0.24695   1.165 0.244076    
+GearSeine:Occlusion                0.22225    0.25695   0.865 0.387063    
+GearCentipede Net:SecchiDepth      0.10852    0.30017   0.362 0.717698    
+GearSeine:SecchiDepth             -0.31368    0.35537  -0.883 0.377410    
+GearCentipede Net:DaylightPercent  0.30606    0.23469   1.304 0.192190    
+GearSeine:DaylightPercent          0.81292    0.22798   3.566 0.000363 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1

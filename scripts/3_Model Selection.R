@@ -1,3 +1,4 @@
+source('scripts/00_AI_Export_Utils.R')
 
 # Libraries and reading/loading data --------------------------------------
 library("MuMIn")
@@ -215,6 +216,13 @@ fit_rich <- glmmTMB(Richness ~ Gear + (1 | Site), data = geardat, family = poiss
 fit_div <- glmmTMB(Shannon ~ Gear + (1 | Site), data = geardat, family = tweedie)
 # Simpson Diversity Model
 fit_sim <- glmmTMB(Simpson ~ Gear + (1 | Site), data = geardat, family = tweedie)
+
+# Export Simple GLMMs to AI_Ready_Data
+export_to_ai(fit_abund, "fit_abund")
+export_to_ai(fit_rich, "fit_rich")
+export_to_ai(fit_div, "fit_div")
+export_to_ai(fit_sim, "fit_sim")
+
 # 
 #Gear differences in response variables, quick checks ----------------------------------
   # Does Effort differ among gears?
@@ -228,6 +236,12 @@ Anova(fit_abund) # Yes
 Anova(fit_rich) # Yes
 Anova(fit_div) # Yes
 summary(fit_sim) # Yes
+
+# Export ANOVA tables to AI_Ready_Data
+write.csv(as.data.frame(Anova(fit_abund)), "output/AI_Ready_Data/Anova_fit_abund.csv")
+write.csv(as.data.frame(Anova(fit_rich)), "output/AI_Ready_Data/Anova_fit_rich.csv")
+write.csv(as.data.frame(Anova(fit_div)), "output/AI_Ready_Data/Anova_fit_div.csv")
+try(write.csv(as.data.frame(Anova(fit_sim)), "output/AI_Ready_Data/Anova_fit_sim.csv"))
 # Also, because these indices are theoretically (and mathematically) descriptions of the balance of species, expecting them to scale with increased effort may be unfounded.(Gotelli et al., 2024)
 
 # Tukey plots -------------------------------------------------------------
@@ -239,6 +253,12 @@ cld_abund <- cld(emmeans(fit_abund, specs = ~ Gear, type = "response"), Letters 
 cld_rich  <- cld(emmeans(fit_rich, specs = ~ Gear, type = "response"), Letters = letters)
 cld_div   <- cld(emmeans(fit_div, specs = ~ Gear, type = "response"), Letters = letters)
 cld_sim   <- cld(emmeans(fit_sim, specs = ~ Gear, type = "response"), Letters = letters)
+
+# Export Post-Hoc results to AI_Ready_Data
+write.csv(as.data.frame(cld_abund), "output/AI_Ready_Data/cld_abund.csv", row.names = FALSE)
+write.csv(as.data.frame(cld_rich), "output/AI_Ready_Data/cld_rich.csv", row.names = FALSE)
+write.csv(as.data.frame(cld_div), "output/AI_Ready_Data/cld_div.csv", row.names = FALSE)
+write.csv(as.data.frame(cld_sim), "output/AI_Ready_Data/cld_sim.csv", row.names = FALSE)
 
 # Function to get pairwise p-values
 get_pairwise_pvals <- function(model, name) {
@@ -361,6 +381,12 @@ SimIntFit <- glmmTMB(
   data = geardat,
   family = tweedie(), na.action = "na.fail"
 )
+
+# Export Global GLMMs to AI_Ready_Data
+export_to_ai(AbundIntFit, "AbundIntFit")
+export_to_ai(RichIntFit, "RichIntFit")
+export_to_ai(DivIntFit, "DivIntFit")
+export_to_ai(SimIntFit, "SimIntFit")
 
 # Check VIFs on global models
 # --- 1. Variance Inflation Factors (Collinearity) ---
@@ -933,3 +959,9 @@ final_metric_gear_2x2_legend <- plot_grid(
 
 final_metric_gear_2x2_legend
 # ggsave(plot = final_metric_gear_2x2_legend, "output/plots/Metric_Gear_2x2.png", width = 5.62, height = 6.5, units = "in", dpi = 300)
+
+# Export MuMIn::dredge outputs to AI_Ready_Data
+write.csv(as.data.frame(AbundIntTest), "output/AI_Ready_Data/AbundIntTest_dredge.csv", row.names = FALSE)
+write.csv(as.data.frame(RichIntTest), "output/AI_Ready_Data/RichIntTest_dredge.csv", row.names = FALSE)
+write.csv(as.data.frame(DivIntTest), "output/AI_Ready_Data/DivIntTest_dredge.csv", row.names = FALSE)
+write.csv(as.data.frame(SimIntTest), "output/AI_Ready_Data/SimIntTest_dredge.csv", row.names = FALSE)

@@ -1,0 +1,8 @@
+"Assemblage","Number of Samples","Observed Richness","Estimated Sample Coverage"
+"Cast Net",34,46,0.8436
+"Centipede Net",33,54,0.905
+"Seine",31,49,0.8585
+"Cast Net & Centipede Net",33,75,0.9083
+"Cast Net & Seine",31,66,0.8797
+"Centipede Net & Seine",30,71,0.9114
+"All Gears",30,83,0.9127

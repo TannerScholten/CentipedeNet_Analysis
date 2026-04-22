@@ -1,0 +1,23 @@
+ Family: tweedie  ( log )
+Formula:          Simpson ~ Gear + (1 | Site)
+Data: geardat
+
+      AIC       BIC    logLik -2*log(L)  df.resid 
+    280.0     294.6    -134.0     268.0        78 
+
+Random effects:
+
+Conditional model:
+ Groups Name        Variance Std.Dev.
+ Site   (Intercept) 0.001929 0.04392 
+Number of obs: 84, groups:  Site, 6
+
+Dispersion parameter for tweedie family (): 0.512 
+
+Conditional model:
+                  Estimate Std. Error z value Pr(>|z|)    
+(Intercept)       0.876251   0.088602   9.890   <2e-16 ***
+GearCentipede Net 0.252717   0.116615   2.167   0.0302 *  
+GearSeine         0.002134   0.125061   0.017   0.9864    
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
